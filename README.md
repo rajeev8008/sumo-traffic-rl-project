@@ -53,9 +53,9 @@ This project aims to develop an intelligent traffic signal controller using Rein
 
 ## 📁 File Structure
 
-  ├── map.net.xml # SUMO network file 
-  ├── traffic.rou.xml # SUMO route/flow file 
-  ├── map.sumocfg # SUMO configuration file 
-  ├── baseline.py # Script for baseline controller 
-  ├── requirements.txt # Python dependencies 
-  └── README.md # This file
+* `map.net.xml`: SUMO network file
+* `traffic.rou.xml`: SUMO route/flow file
+* `map.sumocfg`: SUMO configuration file
+* `baseline.py`: Script for baseline controller
+* `requirements.txt`: Python dependencies
+* `README.md`: This file
