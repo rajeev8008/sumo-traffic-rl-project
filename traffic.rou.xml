@@ -1,0 +1,20 @@
+<routes>
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="5" maxSpeed="70" />
+
+    <vType id="bus" accel="1.5" decel="3.5" sigma="0.5" length="12.5" maxSpeed="50"
+           color="0,1,0" guiShape="bus" />
+
+    <vType id="emergency" accel="4.0" decel="5.0" sigma="0.5" length="7" maxSpeed="90"
+           color="1,0,0" guiShape="emergency" vClass="emergency" />
+
+    <route id="route_NS" edges="B2A1 A1B4" />
+    <route id="route_SN" edges="B4A1 A1B2" />
+    <route id="route_EW" edges="B1A1 A1B3" />
+    <route id="route_WE" edges="B3A1 A1B1" />
+
+    <flow id="car_NS" type="car" route="route_NS" begin="0" end="3600" period="28" /> <flow id="car_SN" type="car" route="route_SN" begin="0" end="3600" period="28" /> <flow id="car_EW" type="car" route="route_EW" begin="0" end="3600" period="20" /> <flow id="car_WE" type="car" route="route_WE" begin="0" end="3600" period="20" /> <flow id="bus_NS" type="bus" route="route_NS" begin="0" end="3600" period="90" />
+    <flow id="bus_SN" type="bus" route="route_SN" begin="0" end="3600" period="90" />
+
+    <flow id="emergency_EW" type="emergency" route="route_EW" begin="0" end="3600" period="30" />
+
+</routes>
