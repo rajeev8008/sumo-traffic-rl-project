@@ -1,17 +1,18 @@
-# Adaptive Traffic Signal Control using RL - Baseline
+# Adaptive Traffic Signal Control using RL - Phase 1 Setup
 
 ## 🔹 Project Goal
 
-This project aims to develop an intelligent traffic signal controller using Reinforcement Learning (RL). This initial phase focuses on setting up a simulation environment and establishing a baseline performance metric using a standard fixed-time controller.
+This project aims to develop an intelligent traffic signal controller using Reinforcement Learning (RL). This phase focuses on setting up a simulation environment, establishing a baseline, and building the interface for the RL agent.
 
 ---
 
 ## 🛠️ Current Setup
 
 1.  **Simulation Environment:** We use **SUMO (Simulation of Urban Mobility)**.
-    * A synthetic 4-way intersection generated using `netgenerate` (`map.net.xml`).
-    * Traffic includes cars, buses, and emergency vehicles spawned using `<flow>` definitions (`traffic.rou.xml`).
-2.  **Baseline Controller:** A Python script (`baseline.py`) uses `traci` to run the simulation with SUMO's default fixed-time traffic light program and collects performance metrics.
+    * A synthetic 4-way intersection (`map.net.xml`) with a central traffic light.
+    * Traffic includes cars, buses, and emergency vehicles (`traffic.rou.xml`).
+2.  **Baseline Controller:** A script (`baseline.py`) runs the simulation with SUMO's default fixed-time light and records performance metrics.
+3.  **RL Environment Wrapper:** A basic Gymnasium wrapper (`SumoEnv.py`) provides the interface between SUMO and an RL agent.
 
 ---
 
@@ -38,16 +39,23 @@ This project aims to develop an intelligent traffic signal controller using Rein
 
 ---
 
-## ▶️ Running the Baseline
+## ▶️ Running Scripts
 
 *(Ensure your virtual environment is activated)*
 
 1.  **Run the Baseline Script:**
-    This runs the simulation (without GUI by default) and prints the average travel/transit times.
+    Reports performance of the fixed-time controller.
     ```bash
     python baseline.py
     ```
-    *(Note: You can change `SUMO_BINARY = "sumo"` to `SUMO_BINARY = "sumo-gui"` inside `baseline.py` if you want to watch the simulation.)*
+    *(Uses `sumo` (headless) by default. Edit the script to use `sumo-gui` if needed.)*
+
+2.  **Test the Environment Wrapper:**
+    Runs the simulation with the `SumoEnv` wrapper using *random actions*. Useful for debugging the wrapper itself.
+    ```bash
+    python test_env.py
+    ```
+    *(Uses `sumo-gui` by default. Edit the script to use `sumo` if needed.)*
 
 ---
 
@@ -57,5 +65,7 @@ This project aims to develop an intelligent traffic signal controller using Rein
 * `traffic.rou.xml`: SUMO route/flow file
 * `map.sumocfg`: SUMO configuration file
 * `baseline.py`: Script for baseline controller
+* `SumoEnv.py`: Gymnasium environment wrapper
+* `test_env.py`: Script to test the SumoEnv wrapper
 * `requirements.txt`: Python dependencies
 * `README.md`: This file
