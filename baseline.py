@@ -3,7 +3,7 @@ import sys
 import traci # Import the traci library
 
 # --- Configuration ---
-SUMO_BINARY = "sumo" # Using command-line SUMO
+SUMO_BINARY = "sumo-gui" # Using command-line SUMO
 CONFIG_FILE = "map.sumocfg"
 SIM_DURATION = 3600
 
