@@ -26,10 +26,11 @@ class SumoEnv(gym.Env):
     Custom Gymnasium Environment for SUMO Traffic Signal Control.
 
     Action Space: Discrete(2) - 0: Keep Phase, 1: Change Phase
-    Observation Space: Box - Represents queue lengths (halting vehicles) per incoming lane.
+    Observation Space: Box(13,) - See __init__ and _get_obs for details.
     """
     metadata = {"render_modes": ["human"], "render_fps": 30} # Include 'human' for GUI rendering
 
+    # --- UPDATED __init__ for Task 2.2 ---
     def __init__(self, use_gui=False, sumocfg_file="map.sumocfg"):
         """
         Initializes the SUMO environment.
@@ -39,35 +40,55 @@ class SumoEnv(gym.Env):
         self.sumocfg_file = sumocfg_file
         self.episode = 0 # Track episode count
         self.current_step = 0 # Track steps within an episode
-        self.max_episode_steps = 3600 # Define a maximum episode length (e.g., 1 hour sim time)
+        self.max_episode_steps = 3600 # Define a maximum episode length
 
-        # --- Action Space ---
+        # --- Action Space (Unchanged) ---
         # 0: Keep the current green phase
         # 1: Switch to the next green phase (via yellow)
-        self.action_space = spaces.Discrete(2)
+        self.action_space = spaces.Discrete(2) #
 
-        # --- Observation Space ---
-        # Queue length (halting cars) for each of the 4 incoming lanes
+        # --- Observation Space (UPDATED for Task 2.2) ---
+        # We need space for:
+        # 1. Queue lengths on 4 incoming lanes
+        # 2. Current phase indicator (1 value: 0 for NS_Green, 1 for EW_Green, -1 for Yellow)
+        # 3. Emergency vehicle approaching flags (4 lanes)
+        # 4. Bus approaching flags (4 lanes)
         num_lanes = len(INCOMING_LANES)
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(num_lanes,), dtype=np.float32)
+        observation_shape = (
+            num_lanes + # Queue lengths
+            1 +         # Current phase indicator
+            num_lanes + # Emergency approaching flags
+            num_lanes   # Bus approaching flags
+        ,) # The comma makes it a tuple shape (13,)
+        # Define bounds (queues can be large, flags/phase are 0/1 or -1)
+        # Using a single Box space for simplicity with Stable Baselines3
+        self.observation_space = spaces.Box(
+            low=np.array([-1.0] * observation_shape[0], dtype=np.float32), # Set low bound to -1 for phase indicator
+            high=np.array([np.inf] * observation_shape[0], dtype=np.float32), # Set high bound high for queues
+            shape=observation_shape,
+            dtype=np.float32
+        )
+        print(f"DEBUG: Observation space shape: {self.observation_space.shape}") # Debug print shape
 
         # --- SUMO Setup ---
         if 'SUMO_HOME' in os.environ:
             tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
-            if tools not in sys.path: # Avoid adding duplicate paths
+            if tools not in sys.path:
                  sys.path.append(tools)
         else:
             sys.exit("Please declare the 'SUMO_HOME' environment variable.")
 
         if self.use_gui:
             self.sumo_binary = os.path.join(os.environ['SUMO_HOME'], 'bin', 'sumo-gui')
-            self.render_mode = "human" # Set render mode if using GUI
+            self.render_mode = "human"
         else:
             self.sumo_binary = os.path.join(os.environ['SUMO_HOME'], 'bin', 'sumo')
             self.render_mode = None
 
-        self.traci_conn = None # Will hold the TraCI connection
-
+        self.traci_conn = None
+        # Store detection distance for priority vehicles
+        self.detection_distance = 100 # Detect priority vehicles within 100 meters
+    # --- END UPDATED __init__ ---
 
     def reset(self, seed=None, options=None):
         """
@@ -107,10 +128,6 @@ class SumoEnv(gym.Env):
             raise RuntimeError("Could not start SUMO.")
 
         # --- Initial Observation ---
-        # Run a few initial steps? (Optional, helps populate the network slightly)
-        # for _ in range(5):
-        #     self.traci_conn.simulationStep()
-
         observation = self._get_obs()
         info = {} # You can add extra info here if needed
 
@@ -123,6 +140,10 @@ class SumoEnv(gym.Env):
         Applies an action and steps the simulation.
         Returns: observation, reward, terminated, truncated, info
         """
+        # Ensure connection is alive
+        if self.traci_conn is None:
+             raise RuntimeError("Traci connection is not alive. Did you call reset()?")
+
         self.current_step += 1
 
         # --- 1. Apply Action ---
@@ -134,25 +155,58 @@ class SumoEnv(gym.Env):
         target_time = self.traci_conn.simulation.getTime() + 10 # Target 10 seconds in future
         current_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
         steps_taken = 0
+        simulation_running = True
 
         while self.traci_conn.simulation.getTime() < target_time:
-             self.traci_conn.simulationStep()
-             steps_taken += 1
-             new_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
-             # If phase changed (e.g., yellow finished), stop stepping early
-             if new_phase != current_phase and new_phase in [0, 2]: # Check if it landed on a green phase
+             # Check if simulation is still running before stepping
+             try:
+                  # Check number of vehicles; if 0, simulation might end
+                  if self.traci_conn.simulation.getMinExpectedNumber() <= 0:
+                       print("DEBUG: No vehicles expected, ending step early.")
+                       simulation_running = False
+                       break
+                  self.traci_conn.simulationStep()
+                  steps_taken += 1
+                  new_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+                  # If phase changed (e.g., yellow finished), stop stepping early
+                  if new_phase != current_phase and new_phase in [0, 2]: # Check if it landed on a green phase
+                       break
+             except traci.TraCIException as e:
+                  print(f"ERROR: TraCIException during simulationStep: {e}. Assuming simulation ended.")
+                  simulation_running = False
                   break
-             # Break if simulation ended prematurely (e.g., no cars left)
-             if self.traci_conn.simulation.getMinExpectedNumber() <= 0:
-                  break
+             except Exception as e:
+                  print(f"ERROR: Unexpected error during simulationStep: {e}")
+                  simulation_running = False
+                  break # Exit loop on unexpected error
 
         # print(f"DEBUG: Stepped SUMO for {steps_taken} steps.")
 
         # --- 3. Get Observation, Reward, Done, Info ---
-        observation = self._get_obs()
-        reward = self._get_reward()
-        terminated = self.traci_conn.simulation.getMinExpectedNumber() <= 0 # Episode ends if no vehicles are expected
-        truncated = self.current_step >= self.max_episode_steps # Episode ends if max steps reached
+        terminated = False
+        truncated = False
+        reward = 0.0 # Default reward if simulation ended abruptly
+        observation = np.zeros(self.observation_space.shape, dtype=np.float32) # Default observation
+
+        if simulation_running:
+            try:
+                observation = self._get_obs()
+                reward = self._get_reward()
+                terminated = self.traci_conn.simulation.getMinExpectedNumber() <= 0 # Episode ends if no vehicles are expected
+                truncated = self.current_step >= self.max_episode_steps # Episode ends if max steps reached
+            except traci.TraCIException as e:
+                print(f"ERROR: TraCIException after step loop: {e}. Terminating episode.")
+                terminated = True # End episode if traci fails here
+                # Use last known good observation or zeros? Let's use zeros.
+                observation = np.zeros(self.observation_space.shape, dtype=np.float32)
+            except Exception as e:
+                print(f"ERROR: Unexpected error after step loop: {e}. Terminating episode.")
+                terminated = True
+                observation = np.zeros(self.observation_space.shape, dtype=np.float32)
+        else:
+             # Simulation ended during the step loop
+             terminated = True
+
         info = {}
 
         # print(f"DEBUG: Step {self.current_step}, Action: {action}, Reward: {reward}, Term: {terminated}, Trunc: {truncated}")
@@ -164,70 +218,140 @@ class SumoEnv(gym.Env):
         """
         Interprets the agent's action (0: Keep, 1: Change) and controls the traffic light.
         """
-        current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+        try:
+            current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
 
-        # Only trigger a change if the light is currently green
-        is_green = current_phase_index in [0, 2] # Indices 0 and 2 are green phases
+            # Only trigger a change if the light is currently green
+            is_green = current_phase_index in [0, 2] # Indices 0 and 2 are green phases
 
-        if action == 1 and is_green:
-            # Start transition to the next phase (switch to yellow)
-            next_yellow_phase = (current_phase_index + 1) % 4 # 0->1, 2->3
-            self.traci_conn.trafficlight.setPhase(TRAFFIC_LIGHT_ID, next_yellow_phase)
-            # print(f"DEBUG: Action 1 - Switching from Green Phase {current_phase_index} to Yellow Phase {next_yellow_phase}")
-        else:
-             # If action is 0, or if currently yellow, do nothing (SUMO handles yellow->green transition)
-             # print(f"DEBUG: Action {action} - Keeping Phase {current_phase_index} (or letting yellow finish)")
-             pass
+            if action == 1 and is_green:
+                # Start transition to the next phase (switch to yellow)
+                next_yellow_phase = (current_phase_index + 1) % 4 # 0->1, 2->3
+                self.traci_conn.trafficlight.setPhase(TRAFFIC_LIGHT_ID, next_yellow_phase)
+                # print(f"DEBUG: Action 1 - Switching from Green Phase {current_phase_index} to Yellow Phase {next_yellow_phase}")
+            else:
+                 # If action is 0, or if currently yellow, do nothing (SUMO handles yellow->green transition)
+                 # print(f"DEBUG: Action {action} - Keeping Phase {current_phase_index} (or letting yellow finish)")
+                 pass
+        except traci.TraCIException as e:
+             print(f"WARNING: TraCIException in _apply_action: {e}")
+        except Exception as e:
+             print(f"ERROR: Unexpected error in _apply_action: {e}")
 
-
+    # --- UPDATED _get_obs for Task 2.2 ---
     def _get_obs(self):
         """
         Retrieves the current state (observation) of the environment.
-        Current implementation: Halting vehicles (queue length) for each incoming lane.
+        Includes: Halting queues, current phase indicator, priority vehicles approaching.
         """
-        queue_lengths = []
-        for lane_id in INCOMING_LANES:
+        queue_lengths = [0.0] * len(INCOMING_LANES)
+        emergency_approaching = [0.0] * len(INCOMING_LANES) # Initialize flags to 0
+        bus_approaching = [0.0] * len(INCOMING_LANES)       # Initialize flags to 0
+        phase_indicator = -1.0 # Default to yellow/unknown
+
+        # Get junction position once
+        try:
+             junction_pos = self.traci_conn.junction.getPosition(TRAFFIC_LIGHT_ID)
+             # Also get phase here to ensure consistency if errors occur later
+             current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+             if current_phase_index == 0: # NS Green
+                  phase_indicator = 0.0
+             elif current_phase_index == 2: # EW Green
+                  phase_indicator = 1.0
+
+        except (traci.TraCIException, Exception) as e:
+             print(f"ERROR: Could not get junction position or phase for {TRAFFIC_LIGHT_ID}: {e}. Returning zero observation.")
+             # Return a zero array of the correct shape if junction info fails
+             return np.zeros(self.observation_space.shape, dtype=np.float32)
+
+        for i, lane_id in enumerate(INCOMING_LANES):
             try:
-                # getLastStepHaltingNumber is generally preferred for queue length
-                queue = self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
-                queue_lengths.append(queue)
+                # 1. Get Queue Length (Halting Vehicles)
+                queue_lengths[i] = self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
+
+                # 2. Check for Approaching Priority Vehicles
+                vehicles_on_lane = self.traci_conn.lane.getLastStepVehicleIDs(lane_id)
+
+                for veh_id in vehicles_on_lane:
+                    try:
+                        # Get vehicle position (front bumper x,y)
+                        veh_pos = self.traci_conn.vehicle.getPosition(veh_id)
+                        # Calculate Euclidean distance
+                        distance = np.sqrt((veh_pos[0] - junction_pos[0])**2 + (veh_pos[1] - junction_pos[1])**2)
+
+                        if distance <= self.detection_distance:
+                            veh_type_id = self.traci_conn.vehicle.getTypeID(veh_id) # Get vType ID
+                            if veh_type_id == "emergency":
+                                emergency_approaching[i] = 1.0 # Set flag for this lane
+                            elif veh_type_id == "bus":
+                                bus_approaching[i] = 1.0 # Set flag for this lane
+                    except traci.TraCIException:
+                        continue # Skip vehicle if it disappeared (race condition)
+                    except Exception as e_dist:
+                        print(f"WARNING: Error getting position/distance for {veh_id}: {e_dist}")
+
             except traci.TraCIException:
-                 # This might happen if the simulation ends unexpectedly
-                 print(f"WARNING: TraCIException getting halting number for lane {lane_id}. Appending 0.")
-                 queue_lengths.append(0)
+                print(f"WARNING: TraCIException getting data for lane {lane_id}. Using 0.")
+                # Values already initialized to 0, just continue
+                pass
             except Exception as e:
-                 print(f"ERROR: Unexpected error getting halting number for lane {lane_id}: {e}")
-                 queue_lengths.append(0) # Append 0 in case of unexpected errors
+                print(f"ERROR: Unexpected error getting obs for lane {lane_id}: {e}. Using 0.")
+                # Values already initialized to 0, just continue
+                pass
 
-        # Ensure the observation is a numpy array of the correct type and shape
-        observation = np.array(queue_lengths, dtype=np.float32)
-        # print(f"DEBUG: Current Observation (Queues): {observation}")
+        # 4. Combine into a single observation vector
+        # Order: [QueueN, Q_E, Q_S, Q_W, PhaseIndicator, Em_N, Em_E, Em_S, Em_W, Bus_N, Bus_E, Bus_S, Bus_W]
+        observation = np.concatenate([
+            queue_lengths,
+            [phase_indicator], # Phase indicator needs to be in a list/array
+            emergency_approaching,
+            bus_approaching
+        ]).astype(np.float32)
+
+        # print(f"DEBUG: Current Observation: {observation}") # Optional detailed print
+        # Ensure observation matches the defined space shape
+        if observation.shape != self.observation_space.shape:
+             print(f"ERROR: Observation shape mismatch! Expected {self.observation_space.shape}, got {observation.shape}. Returning zeros.")
+             return np.zeros(self.observation_space.shape, dtype=np.float32)
+
         return observation
-
+    # --- END UPDATED _get_obs ---
 
     def _get_reward(self):
         """
         Calculates the reward based on the current state.
         Current implementation: Negative sum of queue lengths (aim to minimize queues).
+        TODO: Update this in Task 2.3 for multi-objective reward.
         """
-        current_queues = self._get_obs() # Get current queue state again (or use stored value if needed)
-        # Make sure reward is a scalar float
-        reward = float(-np.sum(current_queues))
+        # Get queue lengths from the *current* state (after the step)
+        # Slicing the observation array is one way, or call traci again
+        # Let's call traci again for simplicity here, though slicing obs might be slightly faster
+        reward = 0.0
+        try:
+             total_halting = 0
+             for lane_id in INCOMING_LANES:
+                  total_halting += self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
+             reward = float(-total_halting)
+        except traci.TraCIException as e:
+             print(f"WARNING: TraCIException in _get_reward: {e}")
+             # Return 0 reward if we can't get state
+        except Exception as e:
+             print(f"ERROR: Unexpected error in _get_reward: {e}")
+
         # print(f"DEBUG: Calculated Reward: {reward}")
         return reward
 
 
     def render(self):
         """
-        Gymnasium requires a render method. In our case, SUMO handles rendering
-        if use_gui is True. This method doesn't need to do anything.
+        Gymnasium requires a render method. SUMO GUI handles rendering.
         """
-        pass # SUMO GUI handles rendering
+        pass # Not needed if SUMO handles rendering
 
 
     def close(self):
         """
-        Closes the TraCI connection when the environment is garbage collected.
+        Closes the TraCI connection.
         """
         if self.traci_conn is not None:
             try:
