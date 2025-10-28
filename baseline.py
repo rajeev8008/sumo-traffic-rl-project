@@ -3,7 +3,7 @@ import sys
 import traci # Import the traci library
 
 # --- Configuration ---
-SUMO_BINARY = "sumo-gui" # Using command-line SUMO
+SUMO_BINARY = "sumo"  # Use command-line SUMO (no GUI for faster execution)
 CONFIG_FILE = "map.sumocfg"
 SIM_DURATION = 3600
 
@@ -31,14 +31,20 @@ print("DEBUG: Initialized travel_times dictionary.")
 depart_times = {}   # veh_id -> depart step
 veh_types = {}      # veh_id -> vehicle class (car/bus/emergency/...)
 print("DEBUG: Initialized depart_times and veh_types maps.")
+veh_source = {}     # veh_id -> 'traci'|'inferred'|'class'|None
+depart_traci_count = 0
+depart_inferred_count = 0
+depart_class_mapped = 0
+arrival_without_depart = 0
 
 # --- Main Simulation Loop ---
 print("Starting SUMO simulation for baseline measurement...")
 
-# Start SUMO
+# Start SUMO with a fixed seed for reproducibility
+# Use seed 42 to get consistent baseline results across multiple runs
 try:
-    print("DEBUG: Attempting traci.start...")
-    traci.start([SUMO_BINARY, "-c", CONFIG_FILE])
+    print("DEBUG: Attempting traci.start with fixed seed for baseline comparison...")
+    traci.start([SUMO_BINARY, "-c", CONFIG_FILE, "--seed=42", "--no-warnings=true"])
     print("DEBUG: traci.start successful.")
 except Exception as e_start:
     print(f"ERROR: Failed to start SUMO/Traci: {e_start}")
@@ -56,20 +62,57 @@ try:
         departed = traci.simulation.getDepartedIDList()
         for veh_id in departed:
             type_id = None
-            # Prefer the user-defined type id (getTypeID) which matches the
-            # ids in traffic.rou.xml (e.g. "car", "bus", "emergency").
+            source = None
             try:
                 type_id = traci.vehicle.getTypeID(veh_id)
+                source = 'traci'
             except Exception:
-                # Fall back to vehicle class (e.g. "passenger", "emergency")
+                type_id = None
+                source = None
+
+            # If we couldn't get a type via TraCI, try to infer it from the
+            # vehicle id (flows often produce ids like "car_NS.0", "bus_SN.0").
+            if type_id is None:
                 try:
-                    type_id = traci.vehicle.getVehicleClass(veh_id)
+                    base = veh_id.split('.')[0]  # e.g. "car_NS"
+                    if base.startswith("car") or "car" in base:
+                        type_id = "car"
+                        source = 'inferred'
+                    elif base.startswith("bus") or "bus" in base:
+                        type_id = "bus"
+                        source = 'inferred'
+                    elif base.startswith("emergency") or "emergency" in base:
+                        type_id = "emergency"
+                        source = 'inferred'
+                    else:
+                        try:
+                            vclass = traci.vehicle.getVehicleClass(veh_id)
+                            if vclass == 'passenger':
+                                type_id = 'car'
+                                source = 'class'
+                            elif vclass == 'emergency':
+                                type_id = 'emergency'
+                                source = 'class'
+                            else:
+                                type_id = None
+                                source = None
+                        except Exception:
+                            type_id = None
+                            source = None
                 except Exception:
                     type_id = None
+                    source = None
 
             depart_times[veh_id] = step
             if type_id is not None:
                 veh_types[veh_id] = type_id
+                veh_source[veh_id] = source
+                if source == 'traci':
+                    depart_traci_count += 1
+                elif source == 'inferred':
+                    depart_inferred_count += 1
+                elif source == 'class':
+                    depart_class_mapped += 1
 
         # Then process arrivals. The vehicle object is often already removed
         # from the simulation when it appears in the arrived list, so calling
@@ -85,9 +128,27 @@ try:
                 # Debug info
                 print(f"DEBUG: Vehicle {veh_id} arrived. stored_type={vtype!r}, depart_step={dep}")
 
+                if vtype is None and dep is not None:
+                    # Try to infer missing type from vehicle id as a last resort
+                    try:
+                        base = veh_id.split('.')[0]
+                        if base.startswith("car") or "car" in base:
+                            vtype = 'car'
+                        elif base.startswith("bus") or "bus" in base:
+                            vtype = 'bus'
+                        elif base.startswith("emergency") or "emergency" in base:
+                            vtype = 'emergency'
+                        if vtype is not None:
+                            print(f"DEBUG: Inferred type '{vtype}' for {veh_id} on arrival.")
+                    except Exception:
+                        vtype = None
+
                 if vtype in travel_times and dep is not None:
                     duration = step - dep
                     travel_times[vtype].append(duration)
+                else:
+                    if dep is None:
+                        arrival_without_depart += 1
 
                 # Clean up maps to avoid growth
                 if veh_id in depart_times:
@@ -157,6 +218,16 @@ try:
         print(f"Average Emergency Transit Time: {avg_emergency_time:.2f} seconds ({num_emergency} finished)")
     else:
         print("No emergency vehicles finished their routes.")
+
+    # Diagnostics summary
+    print("\nBaseline diagnostics:")
+    try:
+        print(f"  Depart types obtained from Traci: {depart_traci_count}")
+        print(f"  Depart types inferred from id: {depart_inferred_count}")
+        print(f"  Depart types mapped from vehicle class: {depart_class_mapped}")
+        print(f"  Arrivals without recorded depart time: {arrival_without_depart}")
+    except Exception:
+        pass
 
 except NameError as ne:
     print(f"\nCRITICAL NameError during metric calculation: {ne}") # Specific NameError
