@@ -78,6 +78,9 @@ class SumoEnv(gym.Env):
 
         self.traci_conn = None
         self.detection_distance = 100 # Detect priority vehicles within 100 meters
+        # Buffers to collect depart/arrival events during the internal stepping loop
+        self._departed_buffer = []
+        self._arrived_buffer = []
     # --- END __init__ ---
 
     def reset(self, seed=None, options=None):
@@ -98,13 +101,16 @@ class SumoEnv(gym.Env):
             self.traci_conn = None
             print("DEBUG: Closed existing TraCI connection.")
 
-        # --- Start SUMO simulation ---
+        # --- Start SUMO simulation with random seed for stochastic flows ---
+        # Use episode number as seed to ensure different flows per episode
+        random_seed = self.episode if self.episode > 0 else 1
         sumo_cmd = [
             self.sumo_binary,
             "-c", self.sumocfg_file,
             "--no-step-log=true",
             "--no-warnings=true",
-            "--quit-on-end=true"
+            "--quit-on-end=true",
+            f"--seed={random_seed}"  # Enable stochastic vehicle generation
         ]
         try:
             traci.start(sumo_cmd)
@@ -113,6 +119,20 @@ class SumoEnv(gym.Env):
         except Exception as e:
             print(f"ERROR: Failed to start SUMO with command {' '.join(sumo_cmd)}: {e}")
             raise RuntimeError("Could not start SUMO.")
+
+        # Initialize buffers and capture vehicles already present at simulation start
+        self._departed_buffer = []
+        self._arrived_buffer = []
+        try:
+            existing = self.traci_conn.vehicle.getIDList()
+            if existing:
+                # Treat existing vehicles as departed at time 0 so downstream
+                # metric collectors can pair arrivals to depart times.
+                self._departed_buffer.extend(existing)
+                print(f"DEBUG: Found {len(existing)} vehicles already in simulation at reset; added to departed buffer.")
+        except Exception:
+            # If vehicle list not available yet, ignore
+            pass
 
         # --- Initial Observation ---
         observation = self._get_obs()
@@ -148,6 +168,19 @@ class SumoEnv(gym.Env):
                        simulation_running = False
                        break
                   self.traci_conn.simulationStep()
+                  # Collect departed/arrived vehicles during the stepping loop so
+                  # external evaluators don't miss events when multiple internal
+                  # steps are executed per env.step()
+                  try:
+                      departed_now = self.traci_conn.simulation.getDepartedIDList()
+                      if departed_now:
+                          self._departed_buffer.extend(departed_now)
+                      arrived_now = self.traci_conn.simulation.getArrivedIDList()
+                      if arrived_now:
+                          self._arrived_buffer.extend(arrived_now)
+                  except Exception:
+                      # Non-fatal: continue without buffering if calls fail
+                      pass
                   steps_taken += 1
                   new_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
                   if new_phase != current_phase and new_phase in [0, 2]:
@@ -187,6 +220,19 @@ class SumoEnv(gym.Env):
         info = {}
         return observation, reward, terminated, truncated, info
 
+    # --- Utility methods for external metric collectors ---
+    def pop_departed(self):
+        """Return and clear the list of departed vehicle IDs collected since last pop."""
+        deps = list(self._departed_buffer)
+        self._departed_buffer.clear()
+        return deps
+
+    def pop_arrived(self):
+        """Return and clear the list of arrived vehicle IDs collected since last pop."""
+        arrs = list(self._arrived_buffer)
+        self._arrived_buffer.clear()
+        return arrs
+
 
     def _apply_action(self, action):
         """
@@ -199,8 +245,14 @@ class SumoEnv(gym.Env):
             if action == 1 and is_green:
                 next_yellow_phase = (current_phase_index + 1) % 4
                 self.traci_conn.trafficlight.setPhase(TRAFFIC_LIGHT_ID, next_yellow_phase)
+                # DEBUG: Log when action is applied
+                if self.current_step <= 5 or self.current_step % 50 == 0:
+                    print(f"DEBUG [Step {self.current_step}]: Action CHANGE applied. Phase {current_phase_index} -> {next_yellow_phase}")
             else:
-                 pass
+                # DEBUG: Log when action is NOT applied
+                if action == 1 and not is_green:
+                    if self.current_step <= 5 or self.current_step % 50 == 0:
+                        print(f"DEBUG [Step {self.current_step}]: Action CHANGE requested but NOT applied (phase {current_phase_index} is yellow)")
         except traci.TraCIException as e:
              print(f"WARNING: TraCIException in _apply_action: {e}")
         except Exception as e:
