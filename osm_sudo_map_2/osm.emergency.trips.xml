@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-11-03 22:13:45.618665 by randomTrips.py v1_19_0+0000-baa66a0f364
+<configuration>
+    <net-file value="osm.net.xml.gz"/>
+    <output-trip-file value="osm.emergency.trips.xml"/>
+    <prefix value="em"/>
+    <trip-attributes value='type="emergency"'/>
+    <period value="300.0"/>
+</configuration>
+-->
+
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <trip id="em0" depart="0.00" from="36054478#4" to="-31756240#11" type="emergency"/>
+    <trip id="em1" depart="300.00" from="-59358758#1" to="-36054718#2" type="emergency"/>
+    <trip id="em2" depart="600.00" from="36054774#0" to="36054711#5" type="emergency"/>
+    <trip id="em3" depart="900.00" from="59358848#1" to="-343842757#2" type="emergency"/>
+    <trip id="em4" depart="1200.00" from="-693606163#6" to="-31756240#3" type="emergency"/>
+    <trip id="em5" depart="1500.00" from="-36054718#1" to="27227507#5" type="emergency"/>
+    <trip id="em6" depart="1800.00" from="-31756240#2" to="-36054716#0" type="emergency"/>
+    <trip id="em7" depart="2100.00" from="36054710#0" to="31756240#9" type="emergency"/>
+    <trip id="em8" depart="2400.00" from="-36054718#1" to="350579487#3" type="emergency"/>
+    <trip id="em9" depart="2700.00" from="59358695#2" to="-164029919#0" type="emergency"/>
+    <trip id="em10" depart="3000.00" from="543470383#6" to="36054716#1" type="emergency"/>
+    <trip id="em11" depart="3300.00" from="-59358848#4" to="-36054710#2" type="emergency"/>
+</routes>

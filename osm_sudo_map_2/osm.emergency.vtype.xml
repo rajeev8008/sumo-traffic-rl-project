@@ -1,0 +1,9 @@
+<routes>
+    <vType id="emergency" 
+           vClass="emergency" 
+           guiShape="emergency" 
+           color="1,0,0" 
+           accel="4.0" 
+           decel="5.0" 
+           maxSpeed="90"/>
+</routes>
