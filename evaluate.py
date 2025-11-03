@@ -28,7 +28,7 @@ except Exception as e:
 # Create the environment instance. SB3 interacts via this instance.
 print("Creating SUMO environment for evaluation...")
 # Pass the USE_GUI flag to the environment constructor
-eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file="map.sumocfg")
+eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file="map.sumocfg2")
 
 # --- Evaluation Loop ---
 # Initialize with CORRECT keys matching vType IDs
