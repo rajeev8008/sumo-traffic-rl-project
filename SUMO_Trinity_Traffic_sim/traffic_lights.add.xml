@@ -1,0 +1,30 @@
+<additional>
+    <!-- 
+      Paste the full cluster ID from netedit here.
+      This program is for the 07:00 - 11:30 Morning Peak (205s cycle)
+    -->
+    <tlLogic id="cluster_1058608554_11707402955_11707402956_11707460716_#5more" type="static" programID="morning_peak" offset="0">
+        
+        <!-- Phase 1: 70 sec Green + 4 sec Yellow -->
+        <!-- You must replace this 'state' with the correct one from netedit -->
+        <phase duration="70" state="GGrrrrGGrrrr"/>
+        <phase duration="4"  state="yyrrrryyrrrr"/>
+        
+        <!-- Phase 2: 45 sec Green + 4 sec Yellow -->
+        <phase duration="45" state="rrGGrrrrGGrr"/>
+        <phase duration="4"  state="rryyrrrryyrr"/>
+        
+        <!-- Phase 3: 25 sec Green + 4 sec Yellow -->
+        <phase duration="25" state="rrrrGGrrrrGG"/>
+        <phase duration="4"  state="rrrryyrrrryy"/>
+        
+        <!-- Phase 4: 50 sec Green + 4 sec Yellow -->
+        <phase duration="50" state="rrrGGgrrrGGg"/>
+        <phase duration="4"  state="rrryyyrrryyy"/>
+        
+        <!-- Phase 5: 15 sec Green + 4 sec Yellow (Pedestrian) -->
+        <phase duration="15" state="rrrrrrrrrrrr"/> <!-- All red for cars -->
+        <phase duration="4"  state="rrrrrrrrrrrr"/>
+
+    </tlLogic>
+</additional>

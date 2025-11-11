@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+    <!-- This default car type is used by background.rou.xml -->
+    <vType id="default_car" vClass="passenger" />
+
+    <!-- This is the vehicle mix for our accurate, data-driven flows -->
+    <vTypeDistribution id="mg_road_mix">
+        <vType id="motorcycle" vClass="motorcycle" probability="0.5174" />
+        <vType id="car" vClass="passenger" probability="0.2490" />
+        <vType id="auto" vClass="taxi" probability="0.1891" />
+        <vType id="bus" vClass="bus" probability="0.0313" />
+        <vType id="truck" vClass="truck" probability="0.0083" />
+    </vTypeDistribution>
+
+    <!-- 
+      ==================================================================
+      MORNING PEAK (08:00 - 11:00 | 3 hours)
+      begin="28800" end="39600"
+      ==================================================================
+    -->
+    
+    <!-- Flows from WEST -->
+    <flow 
+        id="from_west_straight_morning_peak" 
+        begin="28800" end="39600" 
+        number="9057" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="638541497#16" />
+    <flow 
+        id="from_west_left_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1941" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_west_right_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1941" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="1148421491#1" />
+
+    <!-- Flows from EAST -->
+    <flow 
+        id="from_east_straight_morning_peak" 
+        begin="28800" end="39600" 
+        number="7914" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="638541495#1" />
+    <flow 
+        id="from_east_left_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1695" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="1148421491#1" />
+    <flow 
+        id="from_east_right_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1695" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="328349209#9" />
+        
+    <!-- Flows from SOUTH -->
+    <flow 
+        id="from_south_straight_morning_peak" 
+        begin="28800" end="39600" 
+        number="309" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_south_left_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1392" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541495#2" />
+    <flow 
+        id="from_south_right_turn_morning_peak" 
+        begin="28800" end="39600" 
+        number="1392" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541497#1" />
+
+    <!-- 
+      ==================================================================
+      OFF-PEAK (11:00 - 16:00 | 5 hours | 50% traffic rate)
+      begin="39600" end="57600"
+      ==================================================================
+    -->
+
+    <!-- Flows from WEST -->
+    <flow 
+        id="from_west_straight_off_peak" 
+        begin="39600" end="57600" 
+        number="7548" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="638541497#16" />
+    <flow 
+        id="from_west_left_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1618" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_west_right_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1618" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="1148421491#1" />
+
+    <!-- Flows from EAST -->
+    <flow 
+        id="from_east_straight_off_peak" 
+        begin="39600" end="57600" 
+        number="6595" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="638541495#1" />
+    <flow 
+        id="from_east_left_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1413" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="1148421491#1" />
+    <flow 
+        id="from_east_right_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1413" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="328349209#9" />
+        
+    <!-- Flows from SOUTH -->
+    <flow 
+        id="from_south_straight_off_peak" 
+        begin="39600" end="57600" 
+        number="258" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_south_left_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1160" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541495#2" />
+    <flow 
+        id="from_south_right_turn_off_peak" 
+        begin="39600" end="57600" 
+        number="1160" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541497#1" />
+
+    <!-- 
+      ==================================================================
+      EVENING PEAK (16:00 - 20:00 | 4 hours)
+      begin="57600" end="72000"
+      ==================================================================
+    -->
+
+    <!-- Flows from WEST -->
+    <flow 
+        id="from_west_straight_evening_peak" 
+        begin="57600" end="72000" 
+        number="12076" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="638541497#16" />
+    <flow 
+        id="from_west_left_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="2588" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_west_right_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="2588" 
+        type="mg_road_mix" 
+        from="263812623#1" 
+        to="1148421491#1" />
+
+    <!-- Flows from EAST -->
+    <flow 
+        id="from_east_straight_evening_peak" 
+        begin="57600" end="72000" 
+        number="10552" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="638541495#1" />
+    <flow 
+        id="from_east_left_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="2260" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="1148421491#1" />
+    <flow 
+        id="from_east_right_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="2260" 
+        type="mg_road_mix" 
+        from="1354145734#1" 
+        to="328349209#9" />
+        
+    <!-- Flows from SOUTH -->
+    <flow 
+        id="from_south_straight_evening_peak" 
+        begin="57600" end="72000" 
+        number="412" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="328349209#9" />
+    <flow 
+        id="from_south_left_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="1856" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541495#2" />
+    <flow 
+        id="from_south_right_turn_evening_peak" 
+        begin="57600" end="72000" 
+        number="1856" 
+        type="mg_road_mix" 
+        from="638541493#1" 
+        to="638541497#1" />
+
+</routes>
