@@ -1,0 +1,37 @@
+{
+  "total_timesteps": 25000,
+  "eval_freq": 10000,
+  "n_eval_episodes": 5,
+  "early_stopping_patience": 5,
+  "sumocfg_file": "SUMO_Trinity_Traffic_sim/osm.sumocfg",
+  "train_seed": 42,
+  "eval_seeds": [
+    100,
+    200,
+    300
+  ],
+  "timestamp": "2025-11-14T20:04:22.691602",
+  "ppo_config": {
+    "learning_rate": 5e-05,
+    "n_steps": 4096,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "gamma": 0.995,
+    "gae_lambda": 0.95,
+    "ent_coef": 0.005,
+    "vf_coef": 0.25,
+    "max_grad_norm": 0.5,
+    "clip_range": 0.2,
+    "clip_range_vf": null,
+    "policy_kwargs": {
+      "net_arch": [
+        256,
+        256,
+        128
+      ],
+      "activation_fn": "<class 'torch.nn.modules.activation.ReLU'>",
+      "ortho_init": true,
+      "log_std_init": -1.0
+    }
+  }
+}
