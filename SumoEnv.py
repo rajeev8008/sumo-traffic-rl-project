@@ -31,13 +31,53 @@ class SumoEnv(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 30} # Include 'human' for GUI rendering
 
     # --- __init__ includes Task 2.2 changes ---
-    def __init__(self, use_gui=False, sumocfg_file="map.sumocfg"):
+    def __init__(self, use_gui=False, sumocfg_file="map.sumocfg2", network_type="default"):
         """
         Initializes the SUMO environment.
+        
+        Args:
+            use_gui (bool): If True, use sumo-gui; if False, use sumo (headless)
+            sumocfg_file (str): Name of the SUMO config file
+            network_type (str): Type of network - "default" (A1) or "mg_road"
         """
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Try multiple possible locations for the config file
+        # Priority: map.sumocfg2 which has the A1 traffic light
+        possible_paths = [
+            os.path.join(script_dir, sumocfg_file),  # Root folder
+            os.path.join(script_dir, "osm_sudo_map_2", sumocfg_file),  # osm_sudo_map_2 subfolder
+            os.path.join(script_dir, "SUMO_Trinity_Traffic_sim", sumocfg_file),  # Trinity subfolder
+        ]
+        
+        config_file = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                config_file = path
+                print(f"DEBUG: Found config file at {config_file}")
+                break
+        
+        if config_file is None:
+            raise FileNotFoundError(
+                f"Config file '{sumocfg_file}' not found in any of these locations:\n" +
+                "\n".join(possible_paths)
+            )
+        
         super().__init__()
         self.use_gui = use_gui
-        self.sumocfg_file = sumocfg_file
+        self.sumocfg_file = config_file  # Store the full absolute path
+        self.network_type = network_type
+        
+        # Network-specific configuration
+        if network_type == "mg_road":
+            # MG Road network - will detect traffic lights at runtime
+            self.traffic_light_ids = []
+            self.incoming_lanes = []
+        else:
+            # Default network with A1 traffic light
+            self.traffic_light_ids = ["A1"]
+            self.incoming_lanes = ["B2A1_0", "B1A1_0", "B4A1_0", "B3A1_0"]
+        
         self.episode = 0 # Track episode count
         self.current_step = 0 # Track steps within an episode
         self.max_episode_steps = 3600 # Define a maximum episode length
@@ -45,18 +85,13 @@ class SumoEnv(gym.Env):
         # --- Action Space (Unchanged) ---
         self.action_space = spaces.Discrete(2) #
 
-        # --- Observation Space (From Task 2.2) ---
-        num_lanes = len(INCOMING_LANES)
-        observation_shape = (
-            num_lanes + # Queue lengths
-            1 +         # Current phase indicator
-            num_lanes + # Emergency approaching flags
-            num_lanes   # Bus approaching flags
-        ,) # Shape (13,)
+        # --- Observation Space ---
+        # Use a fixed observation size that works for any network
+        obs_size = 13  # Generic size that accommodates most networks
         self.observation_space = spaces.Box(
-            low=np.array([-1.0] * observation_shape[0], dtype=np.float32),
-            high=np.array([np.inf] * observation_shape[0], dtype=np.float32),
-            shape=observation_shape,
+            low=np.array([-1.0] * obs_size, dtype=np.float32),
+            high=np.array([np.inf] * obs_size, dtype=np.float32),
+            shape=(obs_size,),
             dtype=np.float32
         )
         print(f"DEBUG: Observation space shape: {self.observation_space.shape}")
@@ -82,6 +117,11 @@ class SumoEnv(gym.Env):
         self._departed_buffer = []
         self._arrived_buffer = []
     # --- END __init__ ---
+
+    def _get_traffic_lights_for_network(self):
+        """Detect available traffic lights in the network after SUMO starts"""
+        # This will be called during reset when TraCI connection is ready
+        return []
 
     def reset(self, seed=None, options=None):
         """
@@ -116,6 +156,26 @@ class SumoEnv(gym.Env):
             traci.start(sumo_cmd)
             self.traci_conn = traci
             print("DEBUG: SUMO started successfully via TraCI.")
+            
+            # Detect traffic lights and lanes if using MG Road
+            if self.network_type == "mg_road":
+                try:
+                    available_tls = self.traci_conn.trafficlight.getIDList()
+                    if available_tls:
+                        self.traffic_light_ids = available_tls
+                        print(f"DEBUG: Found traffic lights in network: {available_tls}")
+                        
+                        # Get incoming lanes for the first traffic light
+                        tl_id = available_tls[0]
+                        try:
+                            self.incoming_lanes = list(self.traci_conn.trafficlight.getControlledLanes(tl_id))[:4]
+                            print(f"DEBUG: Found incoming lanes: {self.incoming_lanes}")
+                        except Exception as e:
+                            print(f"WARNING: Could not get controlled lanes: {e}")
+                            self.incoming_lanes = []
+                except Exception as e:
+                    print(f"WARNING: Could not detect traffic lights: {e}")
+                    self.traffic_light_ids = []
         except Exception as e:
             print(f"ERROR: Failed to start SUMO with command {' '.join(sumo_cmd)}: {e}")
             raise RuntimeError("Could not start SUMO.")
@@ -157,7 +217,8 @@ class SumoEnv(gym.Env):
 
         # --- 2. Step Simulation ---
         target_time = self.traci_conn.simulation.getTime() + 10
-        current_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+        tl_id = self.traffic_light_ids[0] if self.traffic_light_ids else "A1"
+        current_phase = self.traci_conn.trafficlight.getPhase(tl_id)
         steps_taken = 0
         simulation_running = True
 
@@ -182,7 +243,7 @@ class SumoEnv(gym.Env):
                       # Non-fatal: continue without buffering if calls fail
                       pass
                   steps_taken += 1
-                  new_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+                  new_phase = self.traci_conn.trafficlight.getPhase(tl_id)
                   if new_phase != current_phase and new_phase in [0, 2]:
                        break
              except traci.TraCIException as e:
@@ -239,12 +300,13 @@ class SumoEnv(gym.Env):
         Interprets the agent's action (0: Keep, 1: Change) and controls the traffic light.
         """
         try:
-            current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+            tl_id = self.traffic_light_ids[0] if self.traffic_light_ids else "A1"
+            current_phase_index = self.traci_conn.trafficlight.getPhase(tl_id)
             is_green = current_phase_index in [0, 2]
 
             if action == 1 and is_green:
                 next_yellow_phase = (current_phase_index + 1) % 4
-                self.traci_conn.trafficlight.setPhase(TRAFFIC_LIGHT_ID, next_yellow_phase)
+                self.traci_conn.trafficlight.setPhase(tl_id, next_yellow_phase)
                 # DEBUG: Log when action is applied
                 if self.current_step <= 5 or self.current_step % 50 == 0:
                     print(f"DEBUG [Step {self.current_step}]: Action CHANGE applied. Phase {current_phase_index} -> {next_yellow_phase}")
@@ -264,22 +326,26 @@ class SumoEnv(gym.Env):
         Retrieves the current state (observation) of the environment.
         Includes: Halting queues, current phase indicator, priority vehicles approaching.
         """
-        queue_lengths = [0.0] * len(INCOMING_LANES)
-        emergency_approaching = [0.0] * len(INCOMING_LANES)
-        bus_approaching = [0.0] * len(INCOMING_LANES)
+        # Use incoming lanes or fallback to default
+        lanes_to_use = self.incoming_lanes if self.incoming_lanes else ["B2A1_0", "B1A1_0", "B4A1_0", "B3A1_0"]
+        tl_to_use = self.traffic_light_ids[0] if self.traffic_light_ids else "A1"
+        
+        queue_lengths = [0.0] * len(lanes_to_use)
+        emergency_approaching = [0.0] * len(lanes_to_use)
+        bus_approaching = [0.0] * len(lanes_to_use)
         phase_indicator = -1.0
 
         try:
-             junction_pos = self.traci_conn.junction.getPosition(TRAFFIC_LIGHT_ID)
-             current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+             junction_pos = self.traci_conn.junction.getPosition(tl_to_use)
+             current_phase_index = self.traci_conn.trafficlight.getPhase(tl_to_use)
              if current_phase_index == 0: phase_indicator = 0.0
              elif current_phase_index == 2: phase_indicator = 1.0
 
         except (traci.TraCIException, Exception) as e:
-             print(f"ERROR: Could not get junction position or phase for {TRAFFIC_LIGHT_ID}: {e}. Returning zero observation.")
+             print(f"ERROR: Could not get junction position or phase for {tl_to_use}: {e}. Returning zero observation.")
              return np.zeros(self.observation_space.shape, dtype=np.float32)
 
-        for i, lane_id in enumerate(INCOMING_LANES):
+        for i, lane_id in enumerate(lanes_to_use):
             try:
                 queue_lengths[i] = self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
                 vehicles_on_lane = self.traci_conn.lane.getLastStepVehicleIDs(lane_id)
@@ -307,9 +373,11 @@ class SumoEnv(gym.Env):
             bus_approaching
         ]).astype(np.float32)
 
-        if observation.shape != self.observation_space.shape:
-             print(f"ERROR: Observation shape mismatch! Expected {self.observation_space.shape}, got {observation.shape}. Returning zeros.")
-             return np.zeros(self.observation_space.shape, dtype=np.float32)
+        # Pad or truncate to match observation space
+        if len(observation) < self.observation_space.shape[0]:
+            observation = np.pad(observation, (0, self.observation_space.shape[0] - len(observation)), mode='constant')
+        elif len(observation) > self.observation_space.shape[0]:
+            observation = observation[:self.observation_space.shape[0]]
 
         return observation
     # --- END _get_obs ---
@@ -327,13 +395,16 @@ class SumoEnv(gym.Env):
         W_WAIT = 0.1      # Penalty per second of accumulated wait time
         W_BUS_WAIT = 0.2  # Bonus (reduction in penalty) per second of bus waiting time
 
+        # Use incoming lanes or fallback
+        lanes_to_use = self.incoming_lanes if self.incoming_lanes else ["B2A1_0", "B1A1_0", "B4A1_0", "B3A1_0"]
+        
         try:
             total_halting_vehicles = 0
             total_waiting_time = 0.0
             bus_wait_reduction = 0.0
             # emergency_wait_penalty = 0.0 # Placeholder if needed later
 
-            for lane_id in INCOMING_LANES:
+            for lane_id in lanes_to_use:
                 total_halting_vehicles += self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
                 vehicles_on_lane = self.traci_conn.lane.getLastStepVehicleIDs(lane_id)
                 for veh_id in vehicles_on_lane:

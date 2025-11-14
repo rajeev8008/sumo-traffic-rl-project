@@ -1,4 +1,23 @@
 import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Try multiple locations for config file - prioritize map.sumocfg2 which has A1 traffic light
+possible_configs = [
+    os.path.join(SCRIPT_DIR, "map.sumocfg2"),  # Priority: has A1 traffic light
+    os.path.join(SCRIPT_DIR, "osm.sumocfg"),
+    os.path.join(SCRIPT_DIR, "osm_sudo_map_2", "osm.sumocfg"),
+    os.path.join(SCRIPT_DIR, "SUMO_Trinity_Traffic_sim", "osm.sumocfg"),
+]
+
+CONFIG_FILE = None
+for path in possible_configs:
+    if os.path.exists(path):
+        CONFIG_FILE = path
+        break
+
+if CONFIG_FILE is None:
+    print("ERROR: Could not find any config file in known locations")
+    exit(1)
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.callbacks import CheckpointCallback
@@ -19,7 +38,7 @@ os.makedirs(LOG_PATH, exist_ok=True)
 # --- Environment Setup ---
 print("Creating SUMO environment for training...")
 # Instantiate the environment (use_gui=False for faster training)
-env = SumoEnv(use_gui=False, sumocfg_file="map.sumocfg") #
+env = SumoEnv(use_gui=False, sumocfg_file="map.sumocfg2") #
 
 # It's recommended to check your custom environment follows the Gymnasium API
 # check_env(env) # Optional: Can take time, comment out after first check

@@ -4,7 +4,7 @@ import traci # Import the traci library
 
 # --- Configuration ---
 SUMO_BINARY = "sumo"  # Use command-line SUMO (no GUI for faster execution)
-CONFIG_FILE = "map.sumocfg"
+CONFIG_FILE = "osm.sumocfg"
 SIM_DURATION = 3600
 
 # --- TraCI Setup ---
@@ -16,6 +16,38 @@ if 'SUMO_HOME' in os.environ:
 else:
     print("ERROR: SUMO_HOME environment variable not declared.")
     sys.exit("Please declare the 'SUMO_HOME' environment variable.")
+
+try:
+    if traci.isLoaded():
+        print("DEBUG: Closing existing traci connection...")
+        traci.close()
+        print("DEBUG: Existing connection closed.")
+except Exception:
+    pass
+
+# Use the correct config file that exists
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Try multiple locations - prioritize map.sumocfg2 which has A1 traffic light
+possible_configs = [
+    os.path.join(SCRIPT_DIR, "map.sumocfg2"),  # Priority: has A1 traffic light
+    os.path.join(SCRIPT_DIR, "osm.sumocfg"),
+    os.path.join(SCRIPT_DIR, "osm_sudo_map_2", "osm.sumocfg"),
+    os.path.join(SCRIPT_DIR, "SUMO_Trinity_Traffic_sim", "osm.sumocfg"),
+]
+
+CONFIG_FILE = None
+for path in possible_configs:
+    if os.path.exists(path):
+        CONFIG_FILE = path
+        print(f"DEBUG: Found config file at {CONFIG_FILE}")
+        break
+
+if CONFIG_FILE is None:
+    print(f"ERROR: Config file not found in any location")
+    for path in possible_configs:
+        print(f"  Checked: {path}")
+    exit(1)
 
 # --- Data Collection ---
 travel_times = {
