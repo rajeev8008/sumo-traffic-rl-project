@@ -43,12 +43,21 @@ class SumoEnv(gym.Env):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
         # Try multiple possible locations for the config file
-        # Priority: map.sumocfg2 which has the A1 traffic light
-        possible_paths = [
-            os.path.join(script_dir, sumocfg_file),  # Root folder
-            os.path.join(script_dir, "osm_sudo_map_2", sumocfg_file),  # osm_sudo_map_2 subfolder
-            os.path.join(script_dir, "SUMO_Trinity_Traffic_sim", sumocfg_file),  # Trinity subfolder
-        ]
+        # Priority depends on network type
+        if network_type == "mg_road":
+            # For MG Road, prioritize SUMO_Trinity_Traffic_sim folder
+            possible_paths = [
+                os.path.join(script_dir, "SUMO_Trinity_Traffic_sim", sumocfg_file),  # Trinity first (priority)
+                os.path.join(script_dir, sumocfg_file),  # Root folder
+                os.path.join(script_dir, "osm_sudo_map_2", sumocfg_file),  # osm_sudo_map_2 as fallback
+            ]
+        else:
+            # For default network, prioritize root folder with map.sumocfg2
+            possible_paths = [
+                os.path.join(script_dir, sumocfg_file),  # Root folder
+                os.path.join(script_dir, "osm_sudo_map_2", sumocfg_file),  # osm_sudo_map_2 subfolder
+                os.path.join(script_dir, "SUMO_Trinity_Traffic_sim", sumocfg_file),  # Trinity as fallback
+            ]
         
         config_file = None
         for path in possible_paths:

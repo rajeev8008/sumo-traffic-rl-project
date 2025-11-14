@@ -15,8 +15,8 @@ print("=" * 70)
 NUM_EPISODES = 3
 SIM_DURATION = 1200  # 20 minutes per episode
 
-print(f"\n✓ Number of episodes: {NUM_EPISODES}")
-print(f"✓ Simulation duration per episode: {SIM_DURATION} seconds")
+print(f"\n[OK] Number of episodes: {NUM_EPISODES}")
+print(f"[OK] Simulation duration per episode: {SIM_DURATION} seconds")
 
 # Data collection
 all_episode_results = []
@@ -34,11 +34,11 @@ for episode in range(NUM_EPISODES):
             network_type="mg_road"
         )
         
-        print("✓ Environment created")
+        print("[OK] Environment created")
         
         # Reset environment
         obs, info = env.reset()
-        print("✓ Environment reset")
+        print("[OK] Environment reset")
         
         # Data collection for this episode
         episode_reward = 0
@@ -100,7 +100,7 @@ for episode in range(NUM_EPISODES):
         print(f"  Avg Reward per Step: {avg_reward_per_step:.4f}")
         
     except Exception as e:
-        print(f"\n✗ Error in episode {episode + 1}: {e}")
+        print(f"\n[ERROR] Error in episode {episode + 1}: {e}")
         import traceback
         traceback.print_exc()
         try:
@@ -136,7 +136,7 @@ if all_episode_results:
         "std_reward": std_episode_reward,
     }
     
-    print(f"\n✓ Baseline data collected successfully!")
+    print(f"\n[OK] Baseline data collected successfully!")
     
     # Print for use in compare_results.py
     print(f"\n{'=' * 70}")
@@ -156,6 +156,6 @@ baseline_results = {{
 }}
 """)
 else:
-    print("✗ No baseline data collected")
+    print("[ERROR] No baseline data collected")
 
 print(f"{'=' * 70}\n")

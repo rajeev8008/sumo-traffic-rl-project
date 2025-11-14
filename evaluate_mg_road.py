@@ -14,16 +14,16 @@ NUM_EPISODES = 5
 
 # Check if model exists
 if not os.path.exists(MODEL_PATH):
-    print(f"\n✗ Model not found at {MODEL_PATH}")
+    print(f"\n[ERROR] Model not found at {MODEL_PATH}")
     print("Please train the model first using train_mg_road.py")
     exit(1)
 
 print(f"\nLoading model from {MODEL_PATH}...")
 try:
     model = PPO.load(MODEL_PATH)
-    print("✓ Model loaded successfully")
+    print("[OK] Model loaded successfully")
 except Exception as e:
-    print(f"✗ Failed to load model: {e}")
+    print(f"[ERROR] Failed to load model: {e}")
     exit(1)
 
 # Create evaluation environment
@@ -34,9 +34,9 @@ try:
         sumocfg_file="osm.sumocfg",
         network_type="mg_road"
     )
-    print("✓ Environment created successfully")
+    print("[OK] Environment created successfully")
 except Exception as e:
-    print(f"✗ Failed to create environment: {e}")
+    print(f"[ERROR] Failed to create environment: {e}")
     exit(1)
 
 # Run evaluation
@@ -66,8 +66,8 @@ for episode in range(NUM_EPISODES):
     episode_rewards.append(episode_reward)
     episode_lengths.append(episode_length)
     
-    print(f"  ✓ Episode Reward: {episode_reward:.2f}")
-    print(f"  ✓ Episode Length: {episode_length} steps\n")
+    print(f"  [OK] Episode Reward: {episode_reward:.2f}")
+    print(f"  [OK] Episode Length: {episode_length} steps\n")
 
 # Print summary
 print(f"{'=' * 60}")
@@ -80,4 +80,4 @@ print(f"Worst Episode Reward: {np.min(episode_rewards):.2f}")
 print(f"{'=' * 60}")
 
 env.close()
-print("\n✓ Evaluation complete!")
+print("\n[OK] Evaluation complete!")

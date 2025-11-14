@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-11-14 19:01:02 by Eclipse SUMO sumo Version 1.24.0
+<!-- generated on 2025-11-14 20:12:23 by Eclipse SUMO sumo Version 1.24.0
 <sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
@@ -12,11 +12,6 @@
     <output>
         <tripinfo-output value="C:\Users\mjeni\OneDrive\Desktop\AFML Project\sumo-traffic-rl-project\SUMO_Trinity_Traffic_sim\tripinfo.xml"/>
     </output>
-
-    <time>
-        <begin value="0"/>
-        <end value="3600"/>
-    </time>
 
     <processing>
         <ignore-route-errors value="true"/>
@@ -36,15 +31,16 @@
     </report>
 
     <traci_server>
-        <remote-port value="59365"/>
+        <remote-port value="52037"/>
     </traci_server>
 
     <random_number>
-        <seed value="42"/>
+        <seed value="5"/>
     </random_number>
 
     <gui_only>
         <gui-settings-file value="C:\Users\mjeni\OneDrive\Desktop\AFML Project\sumo-traffic-rl-project\SUMO_Trinity_Traffic_sim\osm.view.xml"/>
+        <quit-on-end value="true"/>
     </gui_only>
 
 </sumoConfiguration>
