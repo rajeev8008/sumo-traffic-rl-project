@@ -36,14 +36,6 @@
 
 <net version="1.20" junctionCornerDetail="5" lefthand="true" limitTurnSpeed="5.50" avoidOverlap="0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
 
-    <vType id="container" accel="0.8" decel="4.5" sigma="0.1" length="15" maxSpeed="25" guiShape="truck"/>
-    <vType id="cable_car" accel="0.5" decel="3.0" sigma="0.1" length="10" maxSpeed="15" guiShape="bus"/>
-    <vType id="subway" accel="1.0" decel="5.0" sigma="0.1" length="25" maxSpeed="30" guiShape="rail"/>
-    <vType id="aircraft" accel="2.0" decel="6.0" sigma="0.1" length="50" maxSpeed="100" guiShape="aircraft"/>
-    <vType id="wheelchair" accel="0.3" decel="2.0" sigma="0.1" length="1.5" maxSpeed="5" guiShape="pedestrian"/>
-    <vType id="scooter" accel="0.5" decel="3.0" sigma="0.1" length="2" maxSpeed="25" guiShape="scooter"/>
-    <vType id="drone" accel="1.0" decel="4.0" sigma="0.1" length="1" maxSpeed="30" guiShape="scooter"/>
-
     <location netOffset="-8640104.00,-1456011.18" convBoundary="0.00,0.00,1333.86,1255.05" origBoundary="77.615375,12.967427,77.627357,12.978414" projParameter="+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"/>
 
     <type id="highway.cycleway" priority="1" numLanes="1" speed="5.56" allow="bicycle" oneway="0" width="2.00"/>
