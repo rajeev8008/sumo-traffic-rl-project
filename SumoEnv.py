@@ -26,6 +26,29 @@ INCOMING_LANES = None
 # Global variable for cumulative reward tracking (used in Delta calculation)
 CUMULATIVE_WAIT_TIME = {} 
 
+# --- Vehicle Type Normalization ---
+def normalize_vehicle_type(vtype: str) -> str:
+    """
+    Normalize vehicle types to standard categories.
+    Maps all variations to: car, bus, emergency, auto, motorcycle, truck
+    """
+    if vtype in ["ambulance", "fire_truck"]:
+        return "emergency"
+    elif vtype in ["default_car"]:
+        return "car"
+    elif vtype in ["motorcycle"]:
+        return "motorcycle"
+    elif vtype in ["truck"]:
+        return "truck"
+    elif vtype in ["bus"]:
+        return "bus"
+    elif vtype in ["auto", "taxi"]:
+        return "auto"
+    elif vtype in ["car", "passenger"]:
+        return "car"
+    else:
+        return vtype  # Return as-is if not recognized
+
 
 class SumoEnv(gym.Env):
     """
@@ -77,7 +100,8 @@ class SumoEnv(gym.Env):
         # --- Weighted Reward Tracking (for vehicle priority) ---
         self.last_weighted_wait = 0.0  # Track weighted wait time across all vehicles
         self.last_emergency_wait = 0.0  # Track emergency vehicle wait time
-        self.last_bus_wait = 0.0  # Track bus vehicle wait time
+        self.last_truck_wait = 0.0     # Track truck vehicle wait time
+        self.last_car_wait = 0.0       # Track car vehicle wait time
 
     # --- _update_observation_space and _detect_incoming_lanes methods (Enhanced with vehicle counts) ---
     def _update_observation_space(self):
@@ -124,6 +148,11 @@ class SumoEnv(gym.Env):
         self.episode += 1
         self.current_step = 0
         self.last_total_wait_time = 0.0
+        # Reset vehicle-specific tracking
+        self.last_weighted_wait = 0.0
+        self.last_emergency_wait = 0.0
+        self.last_truck_wait = 0.0
+        self.last_car_wait = 0.0
         global CUMULATIVE_WAIT_TIME
         CUMULATIVE_WAIT_TIME.clear()
         print(f"DEBUG: Resetting environment for Episode {self.episode}...")
@@ -318,26 +347,27 @@ class SumoEnv(gym.Env):
         """
         Multi-objective reward with vehicle type prioritization.
         
-        Weights:
-        - Emergency vehicles: 5.0x (highest priority)
-        - Bus: 2.0x (public transit priority)
-        - Car: 1.0x (standard)
-        - Motorcycle: 0.5x (lower priority due to high volume)
-        - Taxi/Auto: 0.8x
-        - Truck: 0.6x
+        Priority weights (highest to lowest):
+        - Emergency (ambulance/fire_truck): 5.0x (highest priority)
+        - Truck: 4.0x
+        - Car (default_car): 3.0x
+        - Auto/Taxi: 2.0x
+        - Motorcycle: 1.0x
+        - Bus: 0.5x (lowest priority)
         """
-        # Vehicle type weight mapping
+        # Vehicle type weight mapping - based on user priorities
         vehicle_weights = {
             "emergency": 5.0,
             "ambulance": 5.0,
             "fire_truck": 5.0,
-            "bus": 2.0,
-            "car": 1.0,
-            "passenger": 1.0,
-            "motorcycle": 0.5,
-            "taxi": 0.8,
-            "auto": 0.8,
-            "truck": 0.6,
+            "truck": 4.0,
+            "car": 3.0,
+            "default_car": 3.0,
+            "passenger": 3.0,
+            "auto": 2.0,
+            "taxi": 2.0,
+            "motorcycle": 1.0,
+            "bus": 0.5,
         }
         
         global INCOMING_LANES
@@ -349,7 +379,8 @@ class SumoEnv(gym.Env):
         
         current_weighted_wait = 0.0
         current_emergency_wait = 0.0
-        current_bus_wait = 0.0
+        current_truck_wait = 0.0
+        current_car_wait = 0.0
         
         try:
             all_veh_ids = self.traci_conn.vehicle.getIDList()  # type: ignore
@@ -358,17 +389,21 @@ class SumoEnv(gym.Env):
                 try:
                     wait_time_sec = float(self.traci_conn.vehicle.getAccumulatedWaitingTime(veh_id))  # type: ignore
                     vtype = str(self.traci_conn.vehicle.getTypeID(veh_id))  # type: ignore
+                    # Normalize vehicle types
+                    vtype = normalize_vehicle_type(vtype)
                     
                     # Get weight for this vehicle type
                     weight = vehicle_weights.get(vtype, 1.0)
                     weighted_wait = wait_time_sec * weight
                     
-                    # Track by category
+                    # Track by category for multi-objective optimization
                     current_weighted_wait += weighted_wait
-                    if vtype in ["emergency", "ambulance", "fire_truck"]:
+                    if vtype == "emergency":
                         current_emergency_wait += wait_time_sec
-                    elif vtype == "bus":
-                        current_bus_wait += wait_time_sec
+                    elif vtype == "truck":
+                        current_truck_wait += wait_time_sec
+                    elif vtype == "car":
+                        current_car_wait += wait_time_sec
                     
                 except (traci.TraCIException, ValueError, TypeError):
                     continue
@@ -376,19 +411,23 @@ class SumoEnv(gym.Env):
             # Calculate deltas (improvements)
             delta_weighted = current_weighted_wait - self.last_weighted_wait
             delta_emergency = current_emergency_wait - self.last_emergency_wait
-            delta_bus = current_bus_wait - self.last_bus_wait
+            delta_truck = current_truck_wait - self.last_truck_wait
+            delta_car = current_car_wait - self.last_car_wait
             
-            # Multi-objective reward
-            # 50% for general weighted flow, 30% for bus priority, 20% for emergency
+            # Multi-objective reward based on priority: emergency > truck > car > others
+            # More balanced: 45% general, 30% emergency, 15% truck, 10% car
             reward = (
-                -0.5 * (delta_weighted / 1000.0) +      # General flow optimization
-                -0.3 * (delta_bus / 1000.0) +           # Bus priority
-                -0.2 * (delta_emergency / 500.0)        # Emergency preemption (higher sensitivity)
+                -0.4 * (delta_weighted / 1000.0) +      # General flow optimization
+                -0.35 * (delta_emergency / 500.0) +      # Emergency priority (highest)
+                -0.15 * (delta_truck / 1000.0) +         # Truck priority
+                -0.10 * (delta_car / 1000.0)             # Car priority
             )
             
             # Update state
             self.last_weighted_wait = current_weighted_wait
             self.last_emergency_wait = current_emergency_wait
+            self.last_truck_wait = current_truck_wait
+            self.last_car_wait = current_car_wait
             self.last_bus_wait = current_bus_wait
             
             reward = float(reward)
