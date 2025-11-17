@@ -8,9 +8,9 @@ class PPOAgentConfig:
     # Training parameters
     TOTAL_TIMESTEPS = 100000
     LEARNING_RATE = 3e-4
-    N_STEPS = 2048
+    N_STEPS = 256  # Reduced for faster training iterations
     BATCH_SIZE = 64
-    N_EPOCHS = 10
+    N_EPOCHS = 4  # Reduced from 10 for faster training
     GAMMA = 0.99
     GAE_LAMBDA = 0.95
     CLIP_RANGE = 0.2

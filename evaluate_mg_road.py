@@ -10,7 +10,7 @@ print("=" * 60)
 
 # Configuration
 MODEL_PATH = "models/ppo_mg_road/ppo_mg_road_final_model.zip"
-NUM_EPISODES = 5
+NUM_EPISODES = 1  # Single episode for GUI visualization
 
 # Check if model exists
 if not os.path.exists(MODEL_PATH):
@@ -30,8 +30,8 @@ except Exception as e:
 print("\nCreating evaluation environment for MG Road...")
 try:
     env = SumoEnv(
-        use_gui=False,
-        sumocfg_file="osm.sumocfg",
+        use_gui=True,  # Enable GUI to watch the simulation
+        sumocfg_file="osm_fast.sumocfg",  # Use fast config matching training
         network_type="mg_road"
     )
     print("[OK] Environment created successfully")

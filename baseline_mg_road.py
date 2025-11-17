@@ -30,7 +30,7 @@ for episode in range(NUM_EPISODES):
         # Create environment (same as RL agent)
         env = SumoEnv(
             use_gui=False,
-            sumocfg_file="osm.sumocfg",
+            sumocfg_file="osm_fast.sumocfg",  # Use fast config for fair comparison
             network_type="mg_road"
         )
         

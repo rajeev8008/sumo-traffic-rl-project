@@ -22,7 +22,7 @@ print("\nCreating SUMO environment for MG Road...")
 try:
     env = SumoEnv(
         use_gui=False,
-        sumocfg_file="osm.sumocfg",
+        sumocfg_file="osm_fast.sumocfg",  # Using faster config without background traffic
         network_type="mg_road"
     )
     print("[OK] Environment created successfully")

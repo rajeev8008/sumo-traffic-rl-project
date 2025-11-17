@@ -63,7 +63,6 @@ class SumoEnv(gym.Env):
         for path in possible_paths:
             if os.path.exists(path):
                 config_file = path
-                print(f"DEBUG: Found config file at {config_file}")
                 break
         
         if config_file is None:
@@ -89,7 +88,12 @@ class SumoEnv(gym.Env):
         
         self.episode = 0 # Track episode count
         self.current_step = 0 # Track steps within an episode
-        self.max_episode_steps = 3600 # Define a maximum episode length
+        self.max_episode_steps = 720 # 12 minutes of simulation (optimized for fast training)
+        
+        # Simulation timing configuration
+        # For MG Road network, vehicles start at 28800 (8:00 AM)
+        # We start simulation at this time so vehicles are present
+        self.simulation_start_time = 28800 if network_type == "mg_road" else 0
 
         # --- Action Space (Unchanged) ---
         self.action_space = spaces.Discrete(2) #
@@ -103,7 +107,6 @@ class SumoEnv(gym.Env):
             shape=(obs_size,),
             dtype=np.float32
         )
-        print(f"DEBUG: Observation space shape: {self.observation_space.shape}")
 
         # --- SUMO Setup ---
         if 'SUMO_HOME' in os.environ:
@@ -139,16 +142,15 @@ class SumoEnv(gym.Env):
         super().reset(seed=seed)
         self.episode += 1
         self.current_step = 0
-        print(f"DEBUG: Resetting environment for Episode {self.episode}...")
+        # Removed debug print for faster training
 
         # --- Close existing TraCI connection if open ---
         if self.traci_conn is not None:
             try:
                 self.traci_conn.close()
             except Exception as e:
-                print(f"DEBUG: Error closing previous TraCI connection (might already be closed): {e}")
+                pass  # Silently ignore close errors during training
             self.traci_conn = None
-            print("DEBUG: Closed existing TraCI connection.")
 
         # --- Start SUMO simulation with random seed for stochastic flows ---
         # Use episode number as seed to ensure different flows per episode
@@ -159,12 +161,14 @@ class SumoEnv(gym.Env):
             "--no-step-log=true",
             "--no-warnings=true",
             "--quit-on-end=true",
-            f"--seed={random_seed}"  # Enable stochastic vehicle generation
+            f"--seed={random_seed}",  # Enable stochastic vehicle generation
+            f"--begin={self.simulation_start_time}",  # Start simulation at vehicle departure time
+            "--step-length=1.0",  # Simulation step size in seconds (default is 1.0)
+            "--time-to-teleport=-1"  # Disable teleporting for faster processing
         ]
         try:
             traci.start(sumo_cmd)
             self.traci_conn = traci
-            print("DEBUG: SUMO started successfully via TraCI.")
             
             # Detect traffic lights and lanes if using MG Road
             if self.network_type == "mg_road":
@@ -172,18 +176,13 @@ class SumoEnv(gym.Env):
                     available_tls = self.traci_conn.trafficlight.getIDList()
                     if available_tls:
                         self.traffic_light_ids = available_tls
-                        print(f"DEBUG: Found traffic lights in network: {available_tls}")
-                        
                         # Get incoming lanes for the first traffic light
                         tl_id = available_tls[0]
                         try:
                             self.incoming_lanes = list(self.traci_conn.trafficlight.getControlledLanes(tl_id))[:4]
-                            print(f"DEBUG: Found incoming lanes: {self.incoming_lanes}")
                         except Exception as e:
-                            print(f"WARNING: Could not get controlled lanes: {e}")
                             self.incoming_lanes = []
                 except Exception as e:
-                    print(f"WARNING: Could not detect traffic lights: {e}")
                     self.traffic_light_ids = []
         except Exception as e:
             print(f"ERROR: Failed to start SUMO with command {' '.join(sumo_cmd)}: {e}")
@@ -198,7 +197,6 @@ class SumoEnv(gym.Env):
                 # Treat existing vehicles as departed at time 0 so downstream
                 # metric collectors can pair arrivals to depart times.
                 self._departed_buffer.extend(existing)
-                print(f"DEBUG: Found {len(existing)} vehicles already in simulation at reset; added to departed buffer.")
         except Exception:
             # If vehicle list not available yet, ignore
             pass
@@ -207,7 +205,6 @@ class SumoEnv(gym.Env):
         observation = self._get_obs()
         info = {}
 
-        print(f"DEBUG: Reset complete. Initial observation: {observation}")
         return observation, info
 
 
@@ -225,16 +222,19 @@ class SumoEnv(gym.Env):
         self._apply_action(action)
 
         # --- 2. Step Simulation ---
-        target_time = self.traci_conn.simulation.getTime() + 10
+        # Reduced to 3 seconds for faster training
+        target_time = self.traci_conn.simulation.getTime() + 3
         tl_id = self.traffic_light_ids[0] if self.traffic_light_ids else "A1"
-        current_phase = self.traci_conn.trafficlight.getPhase(tl_id)
+        try:
+            current_phase = self.traci_conn.trafficlight.getPhase(tl_id)
+        except:
+            current_phase = 0  # Fallback if traffic light not found
         steps_taken = 0
         simulation_running = True
 
         while self.traci_conn.simulation.getTime() < target_time:
              try:
                   if self.traci_conn.simulation.getMinExpectedNumber() <= 0:
-                       print("DEBUG: No vehicles expected, ending step early.")
                        simulation_running = False
                        break
                   self.traci_conn.simulationStep()
@@ -255,12 +255,10 @@ class SumoEnv(gym.Env):
                   new_phase = self.traci_conn.trafficlight.getPhase(tl_id)
                   if new_phase != current_phase and new_phase in [0, 2]:
                        break
-             except traci.TraCIException as e:
-                  print(f"ERROR: TraCIException during simulationStep: {e}. Assuming simulation ended.")
+             except traci.TraCIException:
                   simulation_running = False
                   break
-             except Exception as e:
-                  print(f"ERROR: Unexpected error during simulationStep: {e}")
+             except Exception:
                   simulation_running = False
                   break
 
@@ -276,12 +274,7 @@ class SumoEnv(gym.Env):
                 reward = self._get_reward() # Calls the updated reward function
                 terminated = self.traci_conn.simulation.getMinExpectedNumber() <= 0
                 truncated = self.current_step >= self.max_episode_steps
-            except traci.TraCIException as e:
-                print(f"ERROR: TraCIException after step loop: {e}. Terminating episode.")
-                terminated = True
-                observation = np.zeros(self.observation_space.shape, dtype=np.float32)
-            except Exception as e:
-                print(f"ERROR: Unexpected error after step loop: {e}. Terminating episode.")
+            except (traci.TraCIException, Exception):
                 terminated = True
                 observation = np.zeros(self.observation_space.shape, dtype=np.float32)
         else:
@@ -316,18 +309,8 @@ class SumoEnv(gym.Env):
             if action == 1 and is_green:
                 next_yellow_phase = (current_phase_index + 1) % 4
                 self.traci_conn.trafficlight.setPhase(tl_id, next_yellow_phase)
-                # DEBUG: Log when action is applied
-                if self.current_step <= 5 or self.current_step % 50 == 0:
-                    print(f"DEBUG [Step {self.current_step}]: Action CHANGE applied. Phase {current_phase_index} -> {next_yellow_phase}")
-            else:
-                # DEBUG: Log when action is NOT applied
-                if action == 1 and not is_green:
-                    if self.current_step <= 5 or self.current_step % 50 == 0:
-                        print(f"DEBUG [Step {self.current_step}]: Action CHANGE requested but NOT applied (phase {current_phase_index} is yellow)")
-        except traci.TraCIException as e:
-             print(f"WARNING: TraCIException in _apply_action: {e}")
-        except Exception as e:
-             print(f"ERROR: Unexpected error in _apply_action: {e}")
+        except (traci.TraCIException, Exception):
+             pass  # Silently handle errors during training
 
     # --- _get_obs includes Task 2.2 changes ---
     def _get_obs(self):
@@ -350,8 +333,7 @@ class SumoEnv(gym.Env):
              if current_phase_index == 0: phase_indicator = 0.0
              elif current_phase_index == 2: phase_indicator = 1.0
 
-        except (traci.TraCIException, Exception) as e:
-             print(f"ERROR: Could not get junction position or phase for {tl_to_use}: {e}. Returning zero observation.")
+        except (traci.TraCIException, Exception):
              return np.zeros(self.observation_space.shape, dtype=np.float32)
 
         for i, lane_id in enumerate(lanes_to_use):
@@ -370,10 +352,10 @@ class SumoEnv(gym.Env):
                                 emergency_approaching[i] = 1.0
                             elif veh_type_id == "bus":
                                 bus_approaching[i] = 1.0
-                    except traci.TraCIException: continue
-                    except Exception as e_dist: print(f"WARNING: Error getting position/distance for {veh_id}: {e_dist}")
-            except traci.TraCIException: print(f"WARNING: TraCIException getting data for lane {lane_id}. Using 0."); pass
-            except Exception as e: print(f"ERROR: Unexpected error getting obs for lane {lane_id}: {e}. Using 0."); pass
+                    except (traci.TraCIException, Exception):
+                        continue
+            except (traci.TraCIException, Exception):
+                pass  # Use default values
 
         observation = np.concatenate([
             queue_lengths,
@@ -442,11 +424,7 @@ class SumoEnv(gym.Env):
 
             reward = float(reward) # Ensure scalar float
 
-        except traci.TraCIException as e:
-             print(f"WARNING: TraCIException in _get_reward: {e}")
-             return 0.0 # Return neutral reward on error
-        except Exception as e:
-             print(f"ERROR: Unexpected error in _get_reward: {e}")
+        except (traci.TraCIException, Exception):
              return 0.0 # Return neutral reward on error
 
         # print(f"DEBUG: Calculated Reward: {reward}")
@@ -462,8 +440,7 @@ class SumoEnv(gym.Env):
         if self.traci_conn is not None:
             try:
                 self.traci_conn.close()
-                print("DEBUG: TraCI connection closed.")
-            except Exception as e:
-                print(f"DEBUG: Error closing TraCI on env close (might already be closed): {e}")
+            except Exception:
+                pass
             finally:
                 self.traci_conn = None
