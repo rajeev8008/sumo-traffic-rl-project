@@ -40,14 +40,14 @@ class TrainingConfig:
     """Configuration for training"""
     
     # Training
-    TOTAL_TIMESTEPS = 50_000 
+    TOTAL_TIMESTEPS = 150_000 
     EVAL_FREQ = 10_000  
     N_EVAL_EPISODES = 5  
     EARLY_STOPPING_PATIENCE = 5  
     
     # Environments
     SUMOCFG_FILE = "SUMO_Trinity_Traffic_sim/osm.sumocfg"  
-    USE_GUI = False
+    USE_GUI = False  # Keep GUI disabled for training
     
     # Seeds
     TRAIN_SEED = 42
@@ -74,7 +74,7 @@ def setup_directories():
 def create_training_env_fn(seed: int = None):
     """Factory function to create a single training environment instance."""
     env = SumoEnv(
-        use_gui=TrainingConfig.USE_GUI,
+        use_gui=False,  # Always disable GUI for training
         sumocfg_file=TrainingConfig.SUMOCFG_FILE,
     )
     if seed is not None:

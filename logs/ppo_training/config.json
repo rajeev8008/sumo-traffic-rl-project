@@ -1,5 +1,5 @@
 {
-  "total_timesteps": 50000,
+  "total_timesteps": 150000,
   "eval_freq": 10000,
   "n_eval_episodes": 5,
   "early_stopping_patience": 5,
@@ -10,7 +10,7 @@
     200,
     300
   ],
-  "timestamp": "2025-11-17T17:43:00.112941",
+  "timestamp": "2025-11-17T21:24:21.120475",
   "ppo_config": {
     "learning_rate": 5e-05,
     "n_steps": 4096,
