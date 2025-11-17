@@ -4,8 +4,8 @@ import traci # Import the traci library
 
 # --- Configuration ---
 SUMO_BINARY = "sumo"  # Use command-line SUMO (no GUI for faster execution)
-CONFIG_FILE = "map.sumocfg"
-SIM_DURATION = 3600
+CONFIG_FILE = "SUMO_Trinity_Traffic_sim/osm.sumocfg"  # Match model evaluation config
+SIM_DURATION = 30000  # Match evaluation duration (same as model episodes)
 
 # --- TraCI Setup ---
 print("DEBUG: Checking SUMO_HOME...")
