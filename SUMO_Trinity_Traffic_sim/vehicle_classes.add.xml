@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional>
+    <vType id="container" accel="0.8" decel="4.5" sigma="0.1" length="15" maxSpeed="25" guiShape="truck"/>
+    <vType id="cable_car" accel="0.5" decel="3.0" sigma="0.1" length="10" maxSpeed="15" guiShape="bus"/>
+    <vType id="subway" accel="1.0" decel="5.0" sigma="0.1" length="25" maxSpeed="30" guiShape="rail"/>
+    <vType id="aircraft" accel="2.0" decel="6.0" sigma="0.1" length="50" maxSpeed="100" guiShape="aircraft"/>
+    <vType id="wheelchair" accel="0.3" decel="2.0" sigma="0.1" length="1.5" maxSpeed="5" guiShape="pedestrian"/>
+    <vType id="scooter" accel="0.5" decel="3.0" sigma="0.1" length="2" maxSpeed="25" guiShape="scooter"/>
+    <vType id="drone" accel="1.0" decel="4.0" sigma="0.1" length="1" maxSpeed="30" guiShape="scooter"/>
+</additional>
