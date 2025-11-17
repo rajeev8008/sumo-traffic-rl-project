@@ -417,8 +417,8 @@ class SumoEnv(gym.Env):
             # Multi-objective reward based on priority: emergency > truck > car > others
             # More balanced: 45% general, 30% emergency, 15% truck, 10% car
             reward = (
-                -0.4 * (delta_weighted / 1000.0) +      # General flow optimization
-                -0.35 * (delta_emergency / 500.0) +      # Emergency priority (highest)
+                -0.45 * (delta_weighted / 1000.0) +      # General flow optimization
+                -0.30 * (delta_emergency / 500.0) +      # Emergency priority (highest)
                 -0.15 * (delta_truck / 1000.0) +         # Truck priority
                 -0.10 * (delta_car / 1000.0)             # Car priority
             )
