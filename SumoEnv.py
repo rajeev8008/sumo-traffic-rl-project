@@ -73,9 +73,20 @@ class SumoEnv(gym.Env):
         self._departed_buffer = []
         self._arrived_buffer = []
         self.last_total_wait_time = 0.0 # State for Delta Reward
+        
+        # --- Weighted Reward Tracking (for vehicle priority) ---
+        self.last_weighted_wait = 0.0  # Track weighted wait time across all vehicles
+        self.last_emergency_wait = 0.0  # Track emergency vehicle wait time
+        self.last_bus_wait = 0.0  # Track bus vehicle wait time
 
-    # --- _update_observation_space and _detect_incoming_lanes methods (No functional changes) ---
+    # --- _update_observation_space and _detect_incoming_lanes methods (Enhanced with vehicle counts) ---
     def _update_observation_space(self):
+        # Observation space:
+        # - Queue lengths per lane (num_lanes)
+        # - Phase indicator (1)
+        # - Emergency vehicle counts per lane (num_lanes)
+        # - Bus vehicle counts per lane (num_lanes)
+        # Total: 3*num_lanes + 1
         obs_size = 3 * self.num_lanes + 1
         self.observation_space = spaces.Box(
             low=np.array([-1.0] * obs_size, dtype=np.float32),
@@ -260,83 +271,125 @@ class SumoEnv(gym.Env):
             pass
 
     def _get_obs(self):
-        # (Observation logic remains the same - omitted for brevity)
+        # Enhanced observation with emergency and bus counts per lane
         global INCOMING_LANES
         if INCOMING_LANES is None or len(INCOMING_LANES) == 0:
              return np.zeros(self.observation_space.shape, dtype=np.float32)
         
         queue_lengths = [0.0] * len(INCOMING_LANES)
-        emergency_approaching = [0.0] * len(INCOMING_LANES)
-        bus_approaching = [0.0] * len(INCOMING_LANES)
+        emergency_counts = [0.0] * len(INCOMING_LANES)
+        bus_counts = [0.0] * len(INCOMING_LANES)
         phase_indicator = -1.0
         
         try:
-             junction_pos = self.traci_conn.junction.getPosition(TRAFFIC_LIGHT_ID)
-             current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+             junction_pos = self.traci_conn.junction.getPosition(TRAFFIC_LIGHT_ID)  # type: ignore
+             current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)  # type: ignore
              if current_phase_index == 0:
                  phase_indicator = 0.0
              elif current_phase_index == 2:
                  phase_indicator = 1.0
+             
              for i, lane_id in enumerate(INCOMING_LANES):
-                 queue_lengths[i] = self.traci_conn.lane.getLastStepHaltingNumber(lane_id)
-                 vehicles_on_lane = self.traci_conn.lane.getLastStepVehicleIDs(lane_id)
+                 queue_lengths[i] = float(self.traci_conn.lane.getLastStepHaltingNumber(lane_id))  # type: ignore
+                 vehicles_on_lane = self.traci_conn.lane.getLastStepVehicleIDs(lane_id)  # type: ignore
+                 
                  for veh_id in vehicles_on_lane:
-                     veh_pos = self.traci_conn.vehicle.getPosition(veh_id)
-                     distance = np.sqrt((veh_pos[0] - junction_pos[0])**2 + (veh_pos[1] - junction_pos[1])**2)
-                     if distance <= self.detection_distance:
-                         veh_type_id = self.traci_conn.vehicle.getTypeID(veh_id)
-                         if veh_type_id == "emergency":
-                             emergency_approaching[i] = 1.0
+                     try:
+                         veh_type_id = str(self.traci_conn.vehicle.getTypeID(veh_id))  # type: ignore
+                         if veh_type_id in ["ambulance", "fire_truck", "emergency"]:
+                             emergency_counts[i] += 1.0
                          elif veh_type_id == "bus":
-                             bus_approaching[i] = 1.0
+                             bus_counts[i] += 1.0
+                     except:
+                         continue
         except Exception:
              pass
 
         observation = np.concatenate([
             queue_lengths,
             [phase_indicator],
-            emergency_approaching,
-            bus_approaching
+            emergency_counts,
+            bus_counts
         ]).astype(np.float32)
         
         return observation
 
     def _get_reward(self):
         """
-        Calculates the multi-objective reward based on the NEGATIVE DELTA of total waiting time.
+        Multi-objective reward with vehicle type prioritization.
+        
+        Weights:
+        - Emergency vehicles: 5.0x (highest priority)
+        - Bus: 2.0x (public transit priority)
+        - Car: 1.0x (standard)
+        - Motorcycle: 0.5x (lower priority due to high volume)
+        - Taxi/Auto: 0.8x
+        - Truck: 0.6x
         """
+        # Vehicle type weight mapping
+        vehicle_weights = {
+            "emergency": 5.0,
+            "ambulance": 5.0,
+            "fire_truck": 5.0,
+            "bus": 2.0,
+            "car": 1.0,
+            "passenger": 1.0,
+            "motorcycle": 0.5,
+            "taxi": 0.8,
+            "auto": 0.8,
+            "truck": 0.6,
+        }
+        
         global INCOMING_LANES
         if INCOMING_LANES is None or len(INCOMING_LANES) == 0:
             return 0.0
         
-        current_total_wait_time = 0.0
-        bus_wait_penalty = 0.0
+        if self.traci_conn is None:
+            return 0.0
+        
+        current_weighted_wait = 0.0
+        current_emergency_wait = 0.0
+        current_bus_wait = 0.0
         
         try:
-            all_veh_ids = self.traci_conn.vehicle.getIDList()
+            all_veh_ids = self.traci_conn.vehicle.getIDList()  # type: ignore
             
             for veh_id in all_veh_ids:
                 try:
-                    wait_time_sec = self.traci_conn.vehicle.getAccumulatedWaitingTime(veh_id)
-                    current_total_wait_time += wait_time_sec
+                    wait_time_sec = float(self.traci_conn.vehicle.getAccumulatedWaitingTime(veh_id))  # type: ignore
+                    vtype = str(self.traci_conn.vehicle.getTypeID(veh_id))  # type: ignore
                     
-                    # if self.traci_conn.vehicle.getTypeID(veh_id) == "bus":
-                    #     # Apply extra penalty for bus waiting time
-                    #     bus_wait_penalty += wait_time_sec * 0.2 
-                except traci.TraCIException:
+                    # Get weight for this vehicle type
+                    weight = vehicle_weights.get(vtype, 1.0)
+                    weighted_wait = wait_time_sec * weight
+                    
+                    # Track by category
+                    current_weighted_wait += weighted_wait
+                    if vtype in ["emergency", "ambulance", "fire_truck"]:
+                        current_emergency_wait += wait_time_sec
+                    elif vtype == "bus":
+                        current_bus_wait += wait_time_sec
+                    
+                except (traci.TraCIException, ValueError, TypeError):
                     continue
-
-            # --- Reward is the NEGATIVE Delta Waiting Time ---
-            delta_wait_time = current_total_wait_time - self.last_total_wait_time
-            reward = -delta_wait_time
             
-            # Apply additional penalty for bus delay
-            reward -= bus_wait_penalty
+            # Calculate deltas (improvements)
+            delta_weighted = current_weighted_wait - self.last_weighted_wait
+            delta_emergency = current_emergency_wait - self.last_emergency_wait
+            delta_bus = current_bus_wait - self.last_bus_wait
             
-            self.last_total_wait_time = current_total_wait_time
-
-            reward /= 1000.0
+            # Multi-objective reward
+            # 50% for general weighted flow, 30% for bus priority, 20% for emergency
+            reward = (
+                -0.5 * (delta_weighted / 1000.0) +      # General flow optimization
+                -0.3 * (delta_bus / 1000.0) +           # Bus priority
+                -0.2 * (delta_emergency / 500.0)        # Emergency preemption (higher sensitivity)
+            )
             
+            # Update state
+            self.last_weighted_wait = current_weighted_wait
+            self.last_emergency_wait = current_emergency_wait
+            self.last_bus_wait = current_bus_wait
             
             reward = float(reward)
         except traci.TraCIException:

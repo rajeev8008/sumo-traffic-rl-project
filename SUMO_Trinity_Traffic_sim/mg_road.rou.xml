@@ -12,6 +12,10 @@
         <vType id="truck" vClass="truck" probability="0.0083" />
     </vTypeDistribution>
 
+    <!-- EMERGENCY VEHICLES - High Priority -->
+    <vType id="ambulance" vClass="emergency" color="255,0,0" length="5.0" maxSpeed="35" />
+    <vType id="fire_truck" vClass="emergency" color="255,0,0" length="9.0" maxSpeed="30" />
+
     <!-- 
       ==================================================================
       MORNING PEAK (08:00 - 11:00 | 3 hours)
@@ -87,6 +91,46 @@
         type="mg_road_mix" 
         from="638541493#1" 
         to="638541497#1" />
+
+    <!-- EMERGENCY VEHICLES - Morning Peak (08:00-11:00) -->
+    <!-- Ambulance routes -->
+    <flow 
+        id="emergency_ambulance_west_morning_peak" 
+        begin="28800" end="39600" 
+        number="15" 
+        type="ambulance" 
+        from="263812623#1" 
+        to="638541497#16" />
+    <flow 
+        id="emergency_ambulance_east_morning_peak" 
+        begin="28800" end="39600" 
+        number="12" 
+        type="ambulance" 
+        from="1354145734#1" 
+        to="638541495#1" />
+    <flow 
+        id="emergency_ambulance_south_morning_peak" 
+        begin="28800" end="39600" 
+        number="10" 
+        type="ambulance" 
+        from="638541493#1" 
+        to="328349209#9" />
+    
+    <!-- Fire truck routes -->
+    <flow 
+        id="emergency_fire_truck_west_morning_peak" 
+        begin="28800" end="39600" 
+        number="8" 
+        type="fire_truck" 
+        from="263812623#1" 
+        to="328349209#9" />
+    <flow 
+        id="emergency_fire_truck_east_morning_peak" 
+        begin="28800" end="39600" 
+        number="6" 
+        type="fire_truck" 
+        from="1354145734#1" 
+        to="1148421491#1" />
 
     <!-- 
       ==================================================================
