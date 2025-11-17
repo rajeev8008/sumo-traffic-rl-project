@@ -8,10 +8,10 @@ from stable_baselines3 import PPO
 from SumoEnv import SumoEnv # Assuming SumoEnv.py is in the same directory
 
 # --- Configuration ---
-MODEL_PATH = "models/ppo_sumo_model/ppo_sumo_final_model.zip" # Path to your saved model
+MODEL_PATH = "models/ppo_mg_road/best_model" # Path to your saved model (no .zip extension)
 NUM_EPISODES = 5 # Number of episodes to run for evaluation
 # MAX_STEPS_PER_EPISODE is now handled by the environment's internal limit
-USE_GUI = False # Set to False for automated evaluation (no GUI)
+USE_GUI = True # Set to False for automated evaluation (no GUI)
 
 # --- Load Trained Agent ---
 print(f"Loading trained PPO model from {MODEL_PATH}...")
@@ -28,7 +28,7 @@ except Exception as e:
 # Create the environment instance. SB3 interacts via this instance.
 print("Creating SUMO environment for evaluation...")
 # Pass the USE_GUI flag to the environment constructor
-eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file="map.sumocfg2")
+eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file="SUMO_Trinity_Traffic_sim/osm.sumocfg")
 
 # --- Evaluation Loop ---
 # Initialize with CORRECT keys matching vType IDs
