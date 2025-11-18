@@ -1,16 +1,27 @@
 import os
 import sys
+import argparse
 import numpy as np
 import traci
 from stable_baselines3 import PPO
 from SumoEnv import SumoEnv, normalize_vehicle_type
 
+# --- Parse Command Line Arguments ---
+parser = argparse.ArgumentParser(description="Evaluate PPO agent on different SUMO configs")
+parser.add_argument("--config", type=str, default="SUMO_Trinity_Traffic_sim/osm.sumocfg", 
+                    help="Path to SUMO config file")
+parser.add_argument("--model", type=str, default="models/ppo_mg_road/best_model", 
+                    help="Path to trained PPO model")
+parser.add_argument("--episodes", type=int, default=5, 
+                    help="Number of evaluation episodes")
+args = parser.parse_args()
+
 # --- Configuration ---
-MODEL_PATH = "models/ppo_mg_road/best_model"
-NUM_EPISODES = 5
+MODEL_PATH = args.model
+NUM_EPISODES = args.episodes
 USE_GUI = False
 DETERMINISTIC = True
-SUMO_CONFIG = "SUMO_Trinity_Traffic_sim/osm.sumocfg"
+SUMO_CONFIG = args.config
 
 # All vehicle types to track
 VEHICLE_TYPES = ["car", "bus", "emergency", "auto", "motorcycle", "truck"]

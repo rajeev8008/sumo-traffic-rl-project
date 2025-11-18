@@ -7,11 +7,14 @@ import traci
 import time
 
 # --- Constants (MODIFIED for Route File Sync) ---
-TRAFFIC_LIGHT_ID = "cluster_10560858054_11707402955_11707402956_11707460716_#5more"
+TRAFFIC_LIGHT_ID = "cluster_10560858054_11707402955_11707402956_11707460716_#5more"  # Default for mg_road
 PHASE_NS_GREEN = "GGrrrrGGrrrr"
 PHASE_NS_YELLOW = "yyrrrryyrrrr"
 PHASE_EW_GREEN = "rrGGrrrrGGrr"
 PHASE_EW_YELLOW = "rryyrrrryyrr"
+
+# Global variable to track the actual TL ID being used (may differ from TRAFFIC_LIGHT_ID)
+ACTIVE_TRAFFIC_LIGHT_ID = None
 
 # --- CRITICAL FIXES FOR SYNCHRONIZATION AND EFFICIENCY ---
 ROUTE_BEGIN_TIME = 28800.0 # Match the 'depart' time of your first vehicle
@@ -32,22 +35,23 @@ def normalize_vehicle_type(vtype: str) -> str:
     Normalize vehicle types to standard categories.
     Maps all variations to: car, bus, emergency, auto, motorcycle, truck
     """
-    if vtype in ["ambulance", "fire_truck"]:
+    vtype_lower = vtype.lower()
+    
+    if any(x in vtype_lower for x in ["ambulance", "fire_truck", "emergency"]):
         return "emergency"
-    elif vtype in ["default_car"]:
-        return "car"
-    elif vtype in ["motorcycle"]:
-        return "motorcycle"
-    elif vtype in ["truck"]:
-        return "truck"
-    elif vtype in ["bus"]:
+    elif any(x in vtype_lower for x in ["bus"]):
         return "bus"
-    elif vtype in ["auto", "taxi"]:
+    elif any(x in vtype_lower for x in ["motorcycle"]):
+        return "motorcycle"
+    elif any(x in vtype_lower for x in ["truck"]):
+        return "truck"
+    elif any(x in vtype_lower for x in ["auto", "taxi"]):
         return "auto"
-    elif vtype in ["car", "passenger"]:
+    elif any(x in vtype_lower for x in ["car", "passenger", "default_car"]):
         return "car"
     else:
-        return vtype  # Return as-is if not recognized
+        # Default to car if type is unrecognized
+        return "car"
 
 
 class SumoEnv(gym.Env):
@@ -56,10 +60,11 @@ class SumoEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, use_gui=False, sumocfg_file="map.sumocfg"):
+    def __init__(self, use_gui=False, sumocfg_file="map.sumocfg", begin_time=ROUTE_BEGIN_TIME):
         super().__init__()
         self.use_gui = use_gui
         self.sumocfg_file = sumocfg_file
+        self.begin_time = begin_time  # Allow configurable start time
         self.episode = 0
         self.current_step = 0
         
@@ -121,7 +126,7 @@ class SumoEnv(gym.Env):
         print(f"DEBUG: Observation space updated. Num lanes: {self.num_lanes}, Obs shape: {self.observation_space.shape}")
 
     def _detect_incoming_lanes(self):
-        global INCOMING_LANES
+        global INCOMING_LANES, ACTIVE_TRAFFIC_LIGHT_ID
         # (Contains detection logic from previous message - omitted for brevity)
         if INCOMING_LANES is not None:
              self.num_lanes = len(INCOMING_LANES)
@@ -130,14 +135,18 @@ class SumoEnv(gym.Env):
         
         try:
              known_tls = list(self.traci_conn.trafficlight.getIDList())
+             # Try to use the hardcoded ID first, otherwise pick the first available one
              tl_id = TRAFFIC_LIGHT_ID if TRAFFIC_LIGHT_ID in known_tls else known_tls[0] if known_tls else None
              if tl_id:
+                 ACTIVE_TRAFFIC_LIGHT_ID = tl_id  # Set the active traffic light ID
+                 print(f"DEBUG: Using traffic light ID: {tl_id}")
                  incoming = list(self.traci_conn.trafficlight.getControlledLanes(tl_id))
                  if incoming:
                      INCOMING_LANES = incoming
                      self.num_lanes = len(INCOMING_LANES)
                      self._update_observation_space()
-        except Exception:
+        except Exception as e:
+             print(f"DEBUG: Traffic light detection error: {e}")
              pass
 
     def reset(self, seed=None, options=None):
@@ -181,7 +190,7 @@ class SumoEnv(gym.Env):
             "--quit-on-end=true",
             f"--seed={random_seed}",
             f"--step-length={self.sim_time_step}", # Enforce 1 second simulation steps
-            f"--begin={ROUTE_BEGIN_TIME}" # START SIMULATION AT 28800.0
+            f"--begin={self.begin_time}" # START SIMULATION AT CONFIGURED TIME
         ]
         
         try:
@@ -215,9 +224,12 @@ class SumoEnv(gym.Env):
         self._apply_action(action)
         
         # --- 2. Step Simulation for fixed duration ---
-        steps_to_run = int(self.action_duration / self.sim_time_step) 
+        steps_to_run = int(self.action_duration / self.sim_time_step)
         
-        current_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+        global ACTIVE_TRAFFIC_LIGHT_ID
+        tl_id = ACTIVE_TRAFFIC_LIGHT_ID if ACTIVE_TRAFFIC_LIGHT_ID is not None else TRAFFIC_LIGHT_ID
+        
+        current_phase = self.traci_conn.trafficlight.getPhase(tl_id)
         simulation_running = True
         
         for i in range(steps_to_run):
@@ -238,13 +250,13 @@ class SumoEnv(gym.Env):
                 
                 # Yellow phase check: If phase changes from green/yellow to next green/yellow,
                 # we should try to complete the required YELLOW_DURATION.
-                new_phase = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+                new_phase = self.traci_conn.trafficlight.getPhase(tl_id)
                 if new_phase != current_phase and new_phase in [0, 2]:
                     # Break the loop if the main green phase starts, but only if it's not the last step
                     if i < steps_to_run - 1:
                         pass
                 
-                if new_phase in [1, 3] and self.traci_conn.trafficlight.getPhaseDuration(TRAFFIC_LIGHT_ID) <= self.sim_time_step:
+                if new_phase in [1, 3] and self.traci_conn.trafficlight.getPhaseDuration(tl_id) <= self.sim_time_step:
                     # If it's a yellow phase and it's about to end, let it end naturally.
                     pass
                     
@@ -285,15 +297,18 @@ class SumoEnv(gym.Env):
         """
         Interprets the agent's action (0: Keep, 1: Change) and controls the traffic light.
         """
+        global ACTIVE_TRAFFIC_LIGHT_ID
+        tl_id = ACTIVE_TRAFFIC_LIGHT_ID if ACTIVE_TRAFFIC_LIGHT_ID is not None else TRAFFIC_LIGHT_ID
+        
         try:
-            current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)
+            current_phase_index = self.traci_conn.trafficlight.getPhase(tl_id)
             is_green = current_phase_index in [0, 2]
             
             if action == 1 and is_green:
                 next_yellow_phase = (current_phase_index + 1) % 4
-                self.traci_conn.trafficlight.setPhase(TRAFFIC_LIGHT_ID, next_yellow_phase)
+                self.traci_conn.trafficlight.setPhase(tl_id, next_yellow_phase)
                 # Set the duration of the yellow light
-                self.traci_conn.trafficlight.setPhaseDuration(TRAFFIC_LIGHT_ID, YELLOW_DURATION) 
+                self.traci_conn.trafficlight.setPhaseDuration(tl_id, YELLOW_DURATION) 
         except traci.TraCIException:
             pass
         except Exception:
@@ -301,9 +316,11 @@ class SumoEnv(gym.Env):
 
     def _get_obs(self):
         # Enhanced observation with emergency and bus counts per lane
-        global INCOMING_LANES
+        global INCOMING_LANES, ACTIVE_TRAFFIC_LIGHT_ID
         if INCOMING_LANES is None or len(INCOMING_LANES) == 0:
              return np.zeros(self.observation_space.shape, dtype=np.float32)
+        
+        tl_id = ACTIVE_TRAFFIC_LIGHT_ID if ACTIVE_TRAFFIC_LIGHT_ID is not None else TRAFFIC_LIGHT_ID
         
         queue_lengths = [0.0] * len(INCOMING_LANES)
         emergency_counts = [0.0] * len(INCOMING_LANES)
@@ -311,8 +328,8 @@ class SumoEnv(gym.Env):
         phase_indicator = -1.0
         
         try:
-             junction_pos = self.traci_conn.junction.getPosition(TRAFFIC_LIGHT_ID)  # type: ignore
-             current_phase_index = self.traci_conn.trafficlight.getPhase(TRAFFIC_LIGHT_ID)  # type: ignore
+             junction_pos = self.traci_conn.junction.getPosition(tl_id)  # type: ignore
+             current_phase_index = self.traci_conn.trafficlight.getPhase(tl_id)  # type: ignore
              if current_phase_index == 0:
                  phase_indicator = 0.0
              elif current_phase_index == 2:
