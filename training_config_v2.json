@@ -1,0 +1,20 @@
+{
+  "version": "v3_ambulance_priority",
+  "total_timesteps": 200000,
+  "learning_rate": 0.0005,
+  "batch_size": 128,
+  "n_epochs": 20,
+  "gamma": 0.99,
+  "gae_lambda": 0.95,
+  "checkpoint_interval": 10000,
+  "use_tensorboard": true,
+  "improvements": {
+    "reward_function": "Ambulance-focused: 5.0 ambulance bonus, -0.1 ambulance wait penalty, soft penalties for others",
+    "ambulance_bonus": "5.0 per ambulance (vs 1.0 for emergency in v2)",
+    "ambulance_wait_penalty": "-0.1 * avg_ambulance_wait (CRITICAL!)",
+    "target": "Ambulance wait time <30s (from 61.7s baseline)",
+    "compared_to_v2": "Same hyperparameters, different reward function",
+    "training_length": "200K timesteps (same as v2)"
+  },
+  "timestamp": "2025-11-17T20:29:28.644728"
+}

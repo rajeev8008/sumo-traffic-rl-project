@@ -1,0 +1,198 @@
+{
+  "controller_type": "FixedTimeController",
+  "phase_duration": 40,
+  "num_episodes": 3,
+  "timestamp": "2025-11-17T22:59:27.821396",
+  "episodes": [
+    {
+      "episode": 1,
+      "steps": 500,
+      "total_reward": 477.2027085245727,
+      "avg_reward_per_step": 0.9544054170491454,
+      "avg_queue_length": 17.43600082397461,
+      "max_queue_length": 22.0,
+      "avg_wait_time": 74.95731353759766,
+      "max_wait_time": 141.0,
+      "avg_vehicles": 195.162,
+      "max_vehicles": 256,
+      "vehicle_types": {
+        "motorcycle": {
+          "avg_wait_time": 65.91617340458674,
+          "max_wait_time": 201.0,
+          "min_wait_time": 0.0,
+          "count": 202
+        },
+        "car": {
+          "avg_wait_time": 62.94359326168153,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "auto": {
+          "avg_wait_time": 66.39251666547202,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "bus": {
+          "avg_wait_time": 55.94515050167224,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "truck": {
+          "avg_wait_time": 66.97185185185185,
+          "max_wait_time": 193.0,
+          "min_wait_time": 0.0,
+          "count": 194
+        },
+        "ambulance": {
+          "avg_wait_time": 61.67392550143266,
+          "max_wait_time": 194.0,
+          "min_wait_time": 0.0,
+          "count": 195
+        }
+      }
+    },
+    {
+      "episode": 2,
+      "steps": 500,
+      "total_reward": 477.2027085245727,
+      "avg_reward_per_step": 0.9544054170491454,
+      "avg_queue_length": 17.43600082397461,
+      "max_queue_length": 22.0,
+      "avg_wait_time": 74.95731353759766,
+      "max_wait_time": 141.0,
+      "avg_vehicles": 195.162,
+      "max_vehicles": 256,
+      "vehicle_types": {
+        "motorcycle": {
+          "avg_wait_time": 65.91617340458674,
+          "max_wait_time": 201.0,
+          "min_wait_time": 0.0,
+          "count": 202
+        },
+        "car": {
+          "avg_wait_time": 62.94359326168153,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "auto": {
+          "avg_wait_time": 66.39251666547202,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "bus": {
+          "avg_wait_time": 55.94515050167224,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "truck": {
+          "avg_wait_time": 66.97185185185185,
+          "max_wait_time": 193.0,
+          "min_wait_time": 0.0,
+          "count": 194
+        },
+        "ambulance": {
+          "avg_wait_time": 61.67392550143266,
+          "max_wait_time": 194.0,
+          "min_wait_time": 0.0,
+          "count": 195
+        }
+      }
+    },
+    {
+      "episode": 3,
+      "steps": 500,
+      "total_reward": 477.2027085245727,
+      "avg_reward_per_step": 0.9544054170491454,
+      "avg_queue_length": 17.43600082397461,
+      "max_queue_length": 22.0,
+      "avg_wait_time": 74.95731353759766,
+      "max_wait_time": 141.0,
+      "avg_vehicles": 195.162,
+      "max_vehicles": 256,
+      "vehicle_types": {
+        "motorcycle": {
+          "avg_wait_time": 65.91617340458674,
+          "max_wait_time": 201.0,
+          "min_wait_time": 0.0,
+          "count": 202
+        },
+        "car": {
+          "avg_wait_time": 62.94359326168153,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "auto": {
+          "avg_wait_time": 66.39251666547202,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "bus": {
+          "avg_wait_time": 55.94515050167224,
+          "max_wait_time": 197.0,
+          "min_wait_time": 0.0,
+          "count": 198
+        },
+        "truck": {
+          "avg_wait_time": 66.97185185185185,
+          "max_wait_time": 193.0,
+          "min_wait_time": 0.0,
+          "count": 194
+        },
+        "ambulance": {
+          "avg_wait_time": 61.67392550143266,
+          "max_wait_time": 194.0,
+          "min_wait_time": 0.0,
+          "count": 195
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "avg_reward": 477.2027085245727,
+    "std_reward": 0.0,
+    "avg_queue_length": 17.43600082397461,
+    "avg_wait_time": 74.95731353759766,
+    "avg_vehicles": 195.162,
+    "max_vehicles": 256,
+    "vehicle_types": {
+      "motorcycle": {
+        "avg_wait_time": 65.91617340458674,
+        "max_wait_time": 201.0,
+        "min_wait_time": 0.0
+      },
+      "car": {
+        "avg_wait_time": 62.94359326168152,
+        "max_wait_time": 197.0,
+        "min_wait_time": 0.0
+      },
+      "auto": {
+        "avg_wait_time": 66.39251666547202,
+        "max_wait_time": 197.0,
+        "min_wait_time": 0.0
+      },
+      "bus": {
+        "avg_wait_time": 55.94515050167224,
+        "max_wait_time": 197.0,
+        "min_wait_time": 0.0
+      },
+      "truck": {
+        "avg_wait_time": 66.97185185185185,
+        "max_wait_time": 193.0,
+        "min_wait_time": 0.0
+      },
+      "ambulance": {
+        "avg_wait_time": 61.673925501432656,
+        "max_wait_time": 194.0,
+        "min_wait_time": 0.0
+      }
+    }
+  }
+}
