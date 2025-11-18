@@ -125,6 +125,8 @@ Ep   Cars     Car(s)   Bus      Bus(s)   Emerg    Emer(s)  Auto     Auto(s)  Mot
 
 ### How to Evaluate on Indiranagar
 
+**Note**: Use `evaluate_cross_map_fixed.py` for Indiranagar because it automatically detects the correct begin_time (0.0) based on the config path. The `evaluate_all_types.py` script is optimized for Trinity.
+
 #### Using Command Line (Recommended)
 ```bash
 python evaluate_cross_map_fixed.py --config SUMO_Indiranagar_Traffic_sim/osm.sumocfg --episodes 5
@@ -141,9 +143,10 @@ python evaluate_cross_map_fixed.py --config SUMO_Indiranagar_Traffic_sim/osm.sum
 python evaluate_cross_map_fixed.py --config SUMO_Indiranagar_Traffic_sim/osm.sumocfg --episodes 5
 ```
 
-#### Using GUI Visualization (Live Traffic)
+#### Using GUI Visualization (Live Traffic on Trinity)
+Note: `visualize_model.py` currently runs on Trinity intersection only. Edit the `SUMO_CONFIG` variable in the script to change to Indiranagar.
 ```bash
-python visualize_model.py --config SUMO_Indiranagar_Traffic_sim/osm.sumocfg
+python visualize_model.py
 ```
 
 ### Indiranagar Network Details
@@ -254,16 +257,8 @@ python test_env.py
 
 ## 🚀 Training a New Model
 
-### Quick Training (Recommended for Testing)
-```bash
-python train_ppo_fast.py
-```
-- **Time**: ~10-15 minutes
-- **Timesteps**: 50,000
-- **Validation**: Every 5,000 steps
-- **Parallel Environments**: 4
+The project includes training script for PPO agent:
 
-### Full Training (Best Results)
 ```bash
 python train_ppo.py
 ```
@@ -274,6 +269,8 @@ python train_ppo.py
 - **Parallel Environments**: 4
 
 **Model is automatically saved to**: `models/ppo_mg_road/best_model.zip`
+
+Note: You can modify hyperparameters in `train_ppo.py` or `ppo_agent.py` to customize training.
 
 ---
 
@@ -290,7 +287,7 @@ sumo-traffic-rl-project/
 ├── 🤖 TRAINING & AGENT
 │   ├── ppo_agent.py                      # PPO config & callbacks
 │   ├── train_ppo.py                      # Full training (150k steps)
-│   ├── train_ppo_fast.py                 # Quick training (50k steps)
+│   ├── train.py                          # Alternative training script
 │   ├── SumoEnv.py                        # Gymnasium environment
 │   └── models/ppo_mg_road/
 │       └── best_model.zip                # ⭐ Trained model
@@ -402,10 +399,10 @@ python visualize_model.py
 # Watch SUMO GUI with trained agent controlling lights
 ```
 
-### Example 3: Train New Model (15 minutes)
+### Example 3: Train New Model (30-40 minutes)
 ```powershell
 .\venv\Scripts\Activate.ps1
-python train_ppo_fast.py
+python train_ppo.py
 # New model saved to models/ppo_mg_road/best_model.zip
 ```
 

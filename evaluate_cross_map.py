@@ -1,368 +1,285 @@
-"""
-Cross-map evaluation script for trained PPO agent.
-
-This script evaluates the best_model on different SUMO configurations
-to detect overfitting and compare performance metrics across maps.
-
-Usage:
-    python evaluate_cross_map.py --model ./models/ppo_mg_road/best_model.zip
-    python evaluate_cross_map.py --maps mg_road osm --episodes 5
-"""
-
 import os
 import sys
-import numpy as np
-import json
-from pathlib import Path
 import argparse
-from datetime import datetime
-from typing import Dict, List, Tuple
+import numpy as np
+import traci
+from stable_baselines3 import PPO
+from SumoEnv import SumoEnv, normalize_vehicle_type
 
-from SumoEnv import SumoEnv
-from ppo_agent import load_ppo_agent
+# --- Parse Command Line Arguments ---
+parser = argparse.ArgumentParser(description="Evaluate PPO agent on different SUMO configs with observation normalization")
+parser.add_argument("--config", type=str, default="SUMO_Trinity_Traffic_sim/osm.sumocfg", 
+                    help="Path to SUMO config file")
+parser.add_argument("--model", type=str, default="models/ppo_mg_road/best_model", 
+                    help="Path to trained PPO model")
+parser.add_argument("--episodes", type=int, default=5, 
+                    help="Number of evaluation episodes")
+args = parser.parse_args()
 
+# --- Configuration ---
+MODEL_PATH = args.model
+NUM_EPISODES = args.episodes
+USE_GUI = True
+DETERMINISTIC = True
+SUMO_CONFIG = args.config
+EXPECTED_OBS_SIZE = 43  # Model trained on 14 lanes (3*14+1=43)
 
-class CrossMapEvaluationConfig:
-    """Configuration for cross-map evaluation"""
-    
-    # Map configurations
-    MAPS = {
-        "mg_road": "SUMO_Trinity_Traffic_sim/osm.sumocfg",
-        "osm": "osm_sudo_map_2/osm.sumocfg",
-    }
-    
-    USE_GUI = False
-    MAX_EPISODE_STEPS = 120  # Match training environment
-    
-    # Evaluation seeds - diverse seeds to test generalization
-    EVAL_SEEDS = [42, 100, 200, 300, 400]  # Include training seed (42)
-    N_EPISODES_PER_SEED = 3
-    
-    # Output
-    EVAL_LOG_DIR = "./logs/cross_map_evaluation"
+# All vehicle types to track
+VEHICLE_TYPES = ["car", "bus", "emergency", "auto", "motorcycle", "truck"]
 
+# --- Load Trained Agent ---
+print(f"Loading trained PPO model from {MODEL_PATH}...")
+try:
+    model = PPO.load(MODEL_PATH)
+    print("Model loaded successfully.")
+except Exception as e:
+    print(f"ERROR: Could not load the model from {MODEL_PATH}.")
+    print(e)
+    sys.exit("Exiting due to model loading error.")
 
-def create_eval_env(sumocfg_file: str, seed: int = None) -> SumoEnv:
-    """Create evaluation environment with specified SUMO configuration."""
-    env = SumoEnv(
-        use_gui=CrossMapEvaluationConfig.USE_GUI,
-        sumocfg_file=sumocfg_file,
-    )
-    if seed is not None:
-        env.action_space.seed(seed)
-    return env
-
-
-def run_episode(
-    agent,
-    env: SumoEnv,
-    deterministic: bool = True,
-    max_steps: int = CrossMapEvaluationConfig.MAX_EPISODE_STEPS,
-) -> Dict:
-    """Run a single episode and collect metrics."""
-    obs, _ = env.reset()
-    done = False
-    episode_reward = 0.0
-    steps = 0
-    rewards = []
-    actions = []
-    
-    while not done and steps < max_steps:
-        action, _ = agent.predict(obs, deterministic=deterministic)
-        obs, reward, terminated, truncated, _ = env.step(action)
-        done = terminated or truncated
-        
-        episode_reward += reward
-        rewards.append(float(reward))
-        actions.append(int(action))
-        steps += 1
-    
-    return {
-        "total_reward": float(episode_reward),
-        "steps": steps,
-        "avg_step_reward": float(episode_reward / steps) if steps > 0 else 0.0,
-        "rewards": rewards,
-        "actions": actions,
-        "action_diversity": float(np.mean(actions)) if actions else 0.0,
-    }
-
-
-def evaluate_on_seed(
-    agent,
-    sumocfg_file: str,
-    seed: int,
-    n_episodes: int = 3,
-    deterministic: bool = True,
-) -> Dict:
-    """Evaluate agent on a specific seed for N episodes."""
-    print(f"      Seed {seed:3d} ({n_episodes} episodes)...", end=" ", flush=True)
-    env = create_eval_env(sumocfg_file=sumocfg_file, seed=seed)
-    
-    max_steps = env.max_episode_steps if hasattr(env, 'max_episode_steps') else CrossMapEvaluationConfig.MAX_EPISODE_STEPS
-    
-    episode_results = []
-    for ep in range(n_episodes):
-        result = run_episode(agent, env, deterministic=deterministic, max_steps=max_steps)
-        episode_results.append(result)
-    
-    env.close()
-    
-    # Aggregate statistics
-    total_rewards = [r["total_reward"] for r in episode_results]
-    avg_step_rewards = [r["avg_step_reward"] for r in episode_results]
-    action_diversities = [r["action_diversity"] for r in episode_results]
-    
-    summary = {
-        "seed": seed,
-        "n_episodes": n_episodes,
-        "episodes": episode_results,
-        "mean_total_reward": float(np.mean(total_rewards)),
-        "std_total_reward": float(np.std(total_rewards)),
-        "min_total_reward": float(np.min(total_rewards)),
-        "max_total_reward": float(np.max(total_rewards)),
-        "mean_step_reward": float(np.mean(avg_step_rewards)),
-        "std_step_reward": float(np.std(avg_step_rewards)),
-        "mean_action_diversity": float(np.mean(action_diversities)),
-    }
-    
-    print(f"Mean Reward: {summary['mean_total_reward']:8.3f} ± {summary['std_total_reward']:6.3f}")
-    
-    return summary
-
-
-def evaluate_map(
-    agent,
-    map_name: str,
-    sumocfg_file: str,
-    eval_seeds: List[int] = None,
-    n_episodes: int = 3,
-) -> Dict:
-    """Evaluate agent on a specific map across multiple seeds."""
-    if eval_seeds is None:
-        eval_seeds = CrossMapEvaluationConfig.EVAL_SEEDS
-    
-    print(f"\n   Evaluating on map: {map_name}")
-    print(f"   Config: {sumocfg_file}")
-    print(f"   Seeds: {eval_seeds}")
-    print()
-    
-    seed_results = []
-    for seed in eval_seeds:
-        result = evaluate_on_seed(
-            agent,
-            sumocfg_file=sumocfg_file,
-            seed=seed,
-            n_episodes=n_episodes,
-            deterministic=True,
-        )
-        seed_results.append(result)
-    
-    # Aggregate across all seeds
-    all_rewards = [r["mean_total_reward"] for r in seed_results]
-    all_step_rewards = [r["mean_step_reward"] for r in seed_results]
-    
-    map_summary = {
-        "map_name": map_name,
-        "sumocfg_file": sumocfg_file,
-        "n_seeds": len(eval_seeds),
-        "n_episodes_per_seed": n_episodes,
-        "seed_results": seed_results,
-        "overall_mean_reward": float(np.mean(all_rewards)),
-        "overall_std_reward": float(np.std(all_rewards)),
-        "overall_min_reward": float(np.min(all_rewards)),
-        "overall_max_reward": float(np.max(all_rewards)),
-        "overall_mean_step_reward": float(np.mean(all_step_rewards)),
-        "overall_std_step_reward": float(np.std(all_step_rewards)),
-    }
-    
-    return map_summary
-
-
-def compute_overfitting_metrics(training_map_result: Dict, test_map_result: Dict) -> Dict:
+# --- Observation Normalization Function ---
+def normalize_observation(obs, expected_size=EXPECTED_OBS_SIZE):
     """
-    Compute overfitting metrics by comparing training and test map performance.
-    
-    Overfitting occurs when training_map >> test_map performance.
+    Normalize observation to match expected model input size.
+    If obs is larger: take first expected_size elements
+    If obs is smaller: pad with zeros
     """
-    train_reward = training_map_result["overall_mean_reward"]
-    test_reward = test_map_result["overall_mean_reward"]
+    obs = np.array(obs, dtype=np.float32).flatten()
     
-    # Compute performance drop
-    reward_drop = train_reward - test_reward
-    
-    # Compute percentage drop (relative to absolute value of training reward)
-    if train_reward != 0:
-        reward_drop_pct = (reward_drop / abs(train_reward)) * 100
+    if len(obs) == expected_size:
+        return obs
+    elif len(obs) > expected_size:
+        # Take first expected_size elements (truncate extra lanes)
+        print(f"  WARNING: Observation size {len(obs)} > expected {expected_size}. Truncating to match model input.")
+        return obs[:expected_size]
     else:
-        reward_drop_pct = 0.0
-    
-    # Overfitting threshold: > 15% drop in reward
-    overfitting_threshold_pct = 15.0
-    is_overfitted = reward_drop_pct > overfitting_threshold_pct
-    
-    return {
-        "training_map": training_map_result["map_name"],
-        "test_map": test_map_result["map_name"],
-        "training_map_reward": float(train_reward),
-        "test_map_reward": float(test_reward),
-        "reward_drop": float(reward_drop),
-        "reward_drop_pct": float(reward_drop_pct),
-        "overfitting_threshold_pct": overfitting_threshold_pct,
-        "is_overfitted": bool(is_overfitted),
-    }
+        # Pad with zeros
+        print(f"  WARNING: Observation size {len(obs)} < expected {expected_size}. Padding with zeros.")
+        padded = np.zeros(expected_size, dtype=np.float32)
+        padded[:len(obs)] = obs
+        return padded
 
+# --- Environment Setup ---
+print("Creating SUMO environment for evaluation...")
+# Auto-detect begin time: if using SUMO_Indiranagar_Traffic_sim, start at 0; otherwise use default
+begin_time = 0.0 if "SUMO_Indiranagar_Traffic_sim" in SUMO_CONFIG else 28800.0
+print(f"DEBUG: Using begin_time={begin_time} for config {SUMO_CONFIG}")
+eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file=SUMO_CONFIG, begin_time=begin_time)
 
-def full_cross_map_evaluation(model_path: str, maps_to_eval: List[str] = None) -> Dict:
+# --- Evaluation Function ---
+def run_evaluation(env, agent=None, num_episodes=NUM_EPISODES, agent_name="Agent"):
     """
-    Run full cross-map evaluation.
-    
-    Assumes the first map in maps_to_eval is the training map.
+    Run evaluation with optional agent control or baseline fixed-time control.
+    agent=None means use baseline (fixed-time) control
     """
-    if maps_to_eval is None:
-        maps_to_eval = list(CrossMapEvaluationConfig.MAPS.keys())
+    # Initialize tracking for all vehicle types
+    all_episode_travel_times = {}
+    episode_results = []
     
-    print("\n" + "=" * 80)
-    print("[CROSS-MAP EVALUATION FOR OVERFITTING DETECTION]")
-    print("=" * 80)
-    print(f"Model: {model_path}")
-    print(f"Maps to evaluate: {maps_to_eval}")
-    print(f"Evaluation seeds: {CrossMapEvaluationConfig.EVAL_SEEDS}")
-    print(f"Episodes per seed: {CrossMapEvaluationConfig.N_EPISODES_PER_SEED}")
-    print("=" * 80)
+    print(f"\nStarting evaluation using {agent_name} for {num_episodes} episodes...")
     
-    # Load model
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found: {model_path}")
-    
-    print(f"\nLoading model: {model_path}")
-    agent = load_ppo_agent(model_path)
-    print("✓ Model loaded successfully!")
-    
-    # Create output directory
-    os.makedirs(CrossMapEvaluationConfig.EVAL_LOG_DIR, exist_ok=True)
-    
-    results = {
-        "timestamp": datetime.now().isoformat(),
-        "model_path": model_path,
-        "maps": maps_to_eval,
-    }
-    
-    # Evaluate on each map
-    map_results = {}
-    for i, map_name in enumerate(maps_to_eval):
-        if map_name not in CrossMapEvaluationConfig.MAPS:
-            print(f"\n⚠️  Unknown map: {map_name}. Skipping.")
+    for episode in range(num_episodes):
+        print(f"\n--- Episode {episode + 1} / {num_episodes} ({agent_name}) ---")
+        
+        episode_travel_times = {v_type: [] for v_type in VEHICLE_TYPES}
+        depart_times = {}
+        veh_types = {}
+        veh_source = {}
+        action_counts = {'keep': 0, 'change': 0}
+        
+        depart_traci_count = 0
+        depart_inferred_count = 0
+        depart_class_mapped = 0
+        arrival_without_depart = 0
+        
+        try:
+            obs, info = env.reset()
+            obs = normalize_observation(obs)  # Normalize observation
+            terminated = False
+            truncated = False
+            total_reward = 0.0
+            steps = 0
+        except Exception as e:
+            print(f"ERROR: Episode {episode+1}: Failed during reset: {e}")
             continue
         
-        sumocfg_file = CrossMapEvaluationConfig.MAPS[map_name]
-        print(f"\n[{i+1}/{len(maps_to_eval)}] Evaluating map: {map_name}")
+        current_sim_time = 0.0
         
-        map_result = evaluate_map(
-            agent,
-            map_name=map_name,
-            sumocfg_file=sumocfg_file,
-            eval_seeds=CrossMapEvaluationConfig.EVAL_SEEDS,
-            n_episodes=CrossMapEvaluationConfig.N_EPISODES_PER_SEED,
-        )
-        map_results[map_name] = map_result
+        try:
+            while not terminated and not truncated:
+                # Get action from agent or use baseline (no action)
+                if agent is not None:
+                    action, _states = agent.predict(obs, deterministic=DETERMINISTIC)
+                else:
+                    # Baseline: always keep the light (action=0)
+                    action = 0
+                
+                # Step environment
+                obs, reward, terminated, truncated, info = env.step(action)
+                obs = normalize_observation(obs)  # Normalize observation after each step
+                
+                # Track action
+                action_counts['keep' if action == 0 else 'change'] += 1
+                
+                # Collect metrics
+                if env.traci_conn is not None:
+                    try:
+                        current_sim_time = env.traci_conn.simulation.getTime()
+                        
+                        # Process departures
+                        departed = []
+                        try:
+                            departed = env.pop_departed()
+                        except Exception:
+                            try:
+                                departed = env.traci_conn.simulation.getDepartedIDList()
+                            except Exception:
+                                departed = []
+                        
+                        for veh_id in departed:
+                            try:
+                                depart_times[veh_id] = current_sim_time
+                                veh_types[veh_id] = env.traci_conn.vehicle.getTypeID(veh_id)
+                                depart_traci_count += 1
+                            except Exception:
+                                pass
+                        
+                        # Process arrivals
+                        arrived = []
+                        try:
+                            arrived = env.pop_arrived()
+                        except Exception:
+                            try:
+                                arrived = env.traci_conn.simulation.getArrivedIDList()
+                            except Exception:
+                                arrived = []
+                        
+                        for veh_id in arrived:
+                            try:
+                                arrival_time = current_sim_time
+                                
+                                # Determine depart time
+                                if veh_id in depart_times:
+                                    depart = depart_times[veh_id]
+                                else:
+                                    try:
+                                        depart_idx = veh_id.rfind('_')
+                                        depart_time_from_id = int(veh_id[depart_idx+1:])
+                                        depart = depart_time_from_id
+                                        depart_inferred_count += 1
+                                    except Exception:
+                                        depart = current_sim_time
+                                        arrival_without_depart += 1
+                                
+                                # Get vehicle type
+                                if veh_id in veh_types:
+                                    vtype = veh_types[veh_id]
+                                else:
+                                    try:
+                                        vtype = env.traci_conn.vehicle.getTypeID(veh_id)
+                                        depart_class_mapped += 1
+                                    except Exception:
+                                        continue
+                                
+                                # Normalize vehicle type
+                                vtype = normalize_vehicle_type(vtype)
+                                
+                                # Calculate travel time
+                                travel_time = arrival_time - depart
+                                if travel_time > 0:
+                                    episode_travel_times[vtype].append(travel_time)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                
+                steps += 1
+                total_reward += reward
+        
+        except Exception as e:
+            print(f"ERROR: Episode {episode+1}: Unexpected error during evaluation loop: {e}")
+        
+        # Episode summary
+        print(f"Episode {episode + 1} finished after {steps} agent steps (Sim Time: {current_sim_time:.2f}). Total Reward: {total_reward:.2f}")
+        
+        for v_type in VEHICLE_TYPES:
+            if episode_travel_times[v_type]:
+                avg_time = sum(episode_travel_times[v_type]) / len(episode_travel_times[v_type])
+                print(f"  Avg {v_type.capitalize()} Time: {avg_time:.2f}s ({len(episode_travel_times[v_type])} finished)")
+        
+        print(f"\nEpisode diagnostics:")
+        print(f"  Depart types obtained from Traci: {depart_traci_count}")
+        print(f"  Depart types inferred from id: {depart_inferred_count}")
+        print(f"  Depart types mapped from vehicle class: {depart_class_mapped}")
+        print(f"  Arrivals without recorded depart time: {arrival_without_depart}")
+        print(f"  Agent actions: Keep={action_counts['keep']}, Change={action_counts['change']}")
+        
+        # Store episode results
+        ep_res = {'episode': episode + 1}
+        for v_type in VEHICLE_TYPES:
+            if episode_travel_times[v_type]:
+                ep_res[f'{v_type}_count'] = len(episode_travel_times[v_type])
+                ep_res[f'{v_type}_avg'] = float(sum(episode_travel_times[v_type]) / len(episode_travel_times[v_type]))
+            else:
+                ep_res[f'{v_type}_count'] = 0
+                ep_res[f'{v_type}_avg'] = 0.0
+        
+        all_episode_travel_times[episode + 1] = episode_travel_times
+        episode_results.append(ep_res)
     
-    results["map_results"] = map_results
-    
-    # Compute overfitting metrics (training map vs other maps)
-    if len(map_results) > 1:
-        training_map = maps_to_eval[0]  # Assume first map is training map
-        if training_map in map_results:
-            print("\n" + "=" * 80)
-            print("[OVERFITTING ANALYSIS]")
-            print("=" * 80)
-            print(f"Training map: {training_map}")
-            
-            overfitting_results = {}
-            for test_map in maps_to_eval[1:]:
-                if test_map in map_results:
-                    metrics = compute_overfitting_metrics(
-                        map_results[training_map],
-                        map_results[test_map],
-                    )
-                    overfitting_results[test_map] = metrics
-                    
-                    print(f"\n{training_map} vs {test_map}:")
-                    print(f"  Training ({training_map}) reward: {metrics['training_map_reward']:8.3f}")
-                    print(f"  Test ({test_map}) reward:      {metrics['test_map_reward']:8.3f}")
-                    print(f"  Reward drop: {metrics['reward_drop']:8.3f} ({metrics['reward_drop_pct']:6.2f}%)")
-                    
-                    if metrics["is_overfitted"]:
-                        print(f"  ⚠️  OVERFITTING DETECTED (drop > {metrics['overfitting_threshold_pct']:.0f}%)")
-                    else:
-                        print(f"  ✓ Model generalizes well (drop ≤ {metrics['overfitting_threshold_pct']:.0f}%)")
-            
-            results["overfitting_analysis"] = overfitting_results
-    
-    # Print summary statistics
-    print("\n" + "=" * 80)
-    print("[PERFORMANCE SUMMARY BY MAP]")
-    print("=" * 80)
-    for map_name, map_result in map_results.items():
-        print(f"\n{map_name}:")
-        print(f"  Overall reward: {map_result['overall_mean_reward']:8.3f} ± {map_result['overall_std_reward']:6.3f}")
-        print(f"  Min/Max: {map_result['overall_min_reward']:8.3f} / {map_result['overall_max_reward']:8.3f}")
-        print(f"  Step reward: {map_result['overall_mean_step_reward']:8.3f} ± {map_result['overall_std_step_reward']:6.3f}")
-    
-    # Save results to JSON
-    eval_results_path = os.path.join(
-        CrossMapEvaluationConfig.EVAL_LOG_DIR,
-        f"cross_map_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-    )
-    with open(eval_results_path, "w") as f:
-        json.dump(results, f, indent=2)
-    
-    print(f"\n✓ Results saved to: {eval_results_path}")
-    print("=" * 80 + "\n")
-    
-    return results
+    return episode_results, all_episode_travel_times
 
+# --- Run Baseline Evaluation ---
+print(f"\n{'='*110}")
+print("BASELINE EVALUATION (Fixed-Time Signal Control)")
+print(f"{'='*110}")
+baseline_results, baseline_times = run_evaluation(eval_env, agent=None, num_episodes=NUM_EPISODES, agent_name="Baseline")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate trained PPO agent across multiple maps for overfitting detection"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="./models/ppo_mg_road/best_model.zip",
-        help="Path to trained model (.zip file)",
-    )
-    parser.add_argument(
-        "--maps",
-        type=str,
-        nargs="+",
-        default=["mg_road", "osm"],
-        help="Maps to evaluate on (in order: training_map, test_map1, test_map2, ...)",
-    )
-    parser.add_argument(
-        "--episodes",
-        type=int,
-        default=3,
-        help="Episodes per seed for evaluation",
-    )
-    parser.add_argument(
-        "--seeds",
-        type=int,
-        nargs="+",
-        default=CrossMapEvaluationConfig.EVAL_SEEDS,
-        help="Random seeds to evaluate on",
-    )
+# --- Run PPO Agent Evaluation ---
+print(f"\n{'='*110}")
+print("PPO AGENT EVALUATION (Learned Control)")
+print(f"{'='*110}")
+ppo_results, ppo_times = run_evaluation(eval_env, agent=model, num_episodes=NUM_EPISODES, agent_name="PPO Agent")
+
+# --- Comparison ---
+print(f"\n{'='*110}")
+print("OVERALL COMPARISON: BASELINE vs PPO AGENT")
+print(f"{'='*110}")
+
+for v_type in VEHICLE_TYPES:
+    baseline_list = baseline_times.get(v_type, [])
+    ppo_list = ppo_times.get(v_type, [])
     
-    args = parser.parse_args()
-    
-    # Update config
-    CrossMapEvaluationConfig.N_EPISODES_PER_SEED = args.episodes
-    CrossMapEvaluationConfig.EVAL_SEEDS = args.seeds
-    
-    try:
-        results = full_cross_map_evaluation(args.model, maps_to_eval=args.maps)
-    except Exception as e:
-        print(f"\n[ERROR] Cross-map evaluation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    if baseline_list and ppo_list:
+        baseline_avg = sum(baseline_list) / len(baseline_list)
+        ppo_avg = sum(ppo_list) / len(ppo_list)
+        improvement = ((baseline_avg - ppo_avg) / baseline_avg) * 100
+        direction = "Faster" if improvement > 0 else "Slower"
+        print(f"  {v_type.capitalize()}: {abs(improvement):.1f}% {direction} ({baseline_avg:.2f}s -> {ppo_avg:.2f}s)")
+    else:
+        if not baseline_list and not ppo_list:
+            print(f"  {v_type.capitalize()}: No data available")
+        else:
+            print(f"  {v_type.capitalize()}: Incomplete data (missing from one system)")
+
+# --- Detailed Comparison Tables (All Vehicle Types) ---
+print(f"\n{'='*160}")
+print("BASELINE EVALUATION RESULTS (Fixed-Time Signal) - ALL VEHICLE TYPES")
+print(f"{'='*160}")
+print(f"{'Ep':<4} {'Cars':<8} {'Car(s)':<10} {'Bus':<8} {'Bus(s)':<10} {'Emerg':<8} {'Emer(s)':<10} {'Auto':<8} {'Auto(s)':<10} {'Moto':<8} {'Moto(s)':<10} {'Truck':<8} {'Trk(s)':<10}")
+print("-"*160)
+for ep_res in baseline_results:
+    print(f"{ep_res['episode']:<4} {ep_res.get('car_count', 0):<8} {ep_res.get('car_avg', 0):<10.2f} {ep_res.get('bus_count', 0):<8} {ep_res.get('bus_avg', 0):<10.2f} {ep_res.get('emergency_count', 0):<8} {ep_res.get('emergency_avg', 0):<10.2f} {ep_res.get('auto_count', 0):<8} {ep_res.get('auto_avg', 0):<10.2f} {ep_res.get('motorcycle_count', 0):<8} {ep_res.get('motorcycle_avg', 0):<10.2f} {ep_res.get('truck_count', 0):<8} {ep_res.get('truck_avg', 0):<10.2f}")
+print(f"{'='*160}")
+
+print(f"\n{'='*160}")
+print("PPO AGENT EVALUATION RESULTS (Learned Control) - ALL VEHICLE TYPES")
+print(f"{'='*160}")
+print(f"{'Ep':<4} {'Cars':<8} {'Car(s)':<10} {'Bus':<8} {'Bus(s)':<10} {'Emerg':<8} {'Emer(s)':<10} {'Auto':<8} {'Auto(s)':<10} {'Moto':<8} {'Moto(s)':<10} {'Truck':<8} {'Trk(s)':<10}")
+print("-"*160)
+for ep_res in ppo_results:
+    print(f"{ep_res['episode']:<4} {ep_res.get('car_count', 0):<8} {ep_res.get('car_avg', 0):<10.2f} {ep_res.get('bus_count', 0):<8} {ep_res.get('bus_avg', 0):<10.2f} {ep_res.get('emergency_count', 0):<8} {ep_res.get('emergency_avg', 0):<10.2f} {ep_res.get('auto_count', 0):<8} {ep_res.get('auto_avg', 0):<10.2f} {ep_res.get('motorcycle_count', 0):<8} {ep_res.get('motorcycle_avg', 0):<10.2f} {ep_res.get('truck_count', 0):<8} {ep_res.get('truck_avg', 0):<10.2f}")
+print(f"{'='*160}")
+
+# --- Close Environment ---
+print("\nEvaluation script completed successfully.")
