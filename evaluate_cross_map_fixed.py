@@ -61,8 +61,8 @@ def normalize_observation(obs, expected_size=EXPECTED_OBS_SIZE):
 
 # --- Environment Setup ---
 print("Creating SUMO environment for evaluation...")
-# Auto-detect begin time: if using osm_sudo_map_2, start at 0; otherwise use default
-begin_time = 0.0 if "osm_sudo_map_2" in SUMO_CONFIG else 28800.0
+# Auto-detect begin time: if using SUMO_Indiranagar_Traffic_sim, start at 0; otherwise use default
+begin_time = 0.0 if "SUMO_Indiranagar_Traffic_sim" in SUMO_CONFIG else 28800.0
 print(f"DEBUG: Using begin_time={begin_time} for config {SUMO_CONFIG}")
 eval_env = SumoEnv(use_gui=USE_GUI, sumocfg_file=SUMO_CONFIG, begin_time=begin_time)
 

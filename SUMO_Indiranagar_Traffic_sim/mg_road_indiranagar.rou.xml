@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <!-- Vehicle Type Definitions -->
+    <vType id="default_car" vClass="passenger" />
+
+    <!-- This is the vehicle mix for our accurate, data-driven flows -->
+    <vTypeDistribution id="mg_road_mix">
+        <vType id="motorcycle" vClass="motorcycle" probability="0.5174" />
+        <vType id="car" vClass="passenger" probability="0.2490" />
+        <vType id="auto" vClass="taxi" probability="0.1891" />
+        <vType id="bus" vClass="bus" probability="0.0313" />
+        <vType id="truck" vClass="truck" probability="0.0083" />
+    </vTypeDistribution>
+
+    <!-- EMERGENCY VEHICLES - High Priority -->
+    <vType id="ambulance" vClass="emergency" color="255,0,0" length="5.0" maxSpeed="35" />
+    <vType id="fire_truck" vClass="emergency" color="255,0,0" length="9.0" maxSpeed="30" />
+
+    <!-- 
+      ==================================================================
+      CONTINUOUS FLOW (00:00 - 20:00 | 1200 seconds)
+      Scaled for Indiranagar network size (approx 2500-3000 vehicles total)
+      Using only valid bidirectional edges from the actual network
+      ==================================================================
+    -->
+    
+    <!-- Flows from 100 Feet Road (27227507) - Primary North-South Route -->
+    <flow 
+        id="from_100ft_road_1_2" 
+        begin="0" end="1200" 
+        number="240" 
+        type="mg_road_mix" 
+        from="27227507#1" 
+        to="27227507#3" />
+    <flow 
+        id="from_100ft_road_3_1" 
+        begin="0" end="1200" 
+        number="210" 
+        type="mg_road_mix" 
+        from="27227507#3" 
+        to="27227507#1" />
+
+    <!-- Flows from 100 Feet Road - Reverse Direction (543470383) -->
+    <flow 
+        id="from_100ft_alt_0_3" 
+        begin="0" end="1200" 
+        number="270" 
+        type="mg_road_mix" 
+        from="543470383#0" 
+        to="543470383#3" />
+    <flow 
+        id="from_100ft_alt_3_0" 
+        begin="0" end="1200" 
+        number="240" 
+        type="mg_road_mix" 
+        from="543470383#3" 
+        to="543470383#0" />
+
+    <!-- Flows from 100 Feet Road - Upper Section (1167293941) -->
+    <flow 
+        id="from_100ft_upper_0_1" 
+        begin="0" end="1200" 
+        number="225" 
+        type="mg_road_mix" 
+        from="1167293941#0" 
+        to="1167293941#1" />
+    <flow 
+        id="from_100ft_upper_1_0" 
+        begin="0" end="1200" 
+        number="195" 
+        type="mg_road_mix" 
+        from="1167293941#1" 
+        to="1167293941#0" />
+
+    <!-- Flows from Chinmaya Mission Hospital Road (1054124407) -->
+    <flow 
+        id="from_hospital_road_forward" 
+        begin="0" end="1200" 
+        number="180" 
+        type="mg_road_mix" 
+        from="1054124407#2" 
+        to="1054124407#2" />
+
+    <!-- Flows from 100 Feet Road sections with good connectivity -->
+    <flow 
+        id="flow_27227507_2_4" 
+        begin="0" end="1200" 
+        number="190" 
+        type="mg_road_mix" 
+        from="27227507#2" 
+        to="27227507#4" />
+    <flow 
+        id="flow_27227507_4_2" 
+        begin="0" end="1200" 
+        number="170" 
+        type="mg_road_mix" 
+        from="27227507#4" 
+        to="27227507#2" />
+
+    <flow 
+        id="flow_543470383_2_5" 
+        begin="0" end="1200" 
+        number="210" 
+        type="mg_road_mix" 
+        from="543470383#2" 
+        to="543470383#5" />
+    <flow 
+        id="flow_543470383_5_2" 
+        begin="0" end="1200" 
+        number="185" 
+        type="mg_road_mix" 
+        from="543470383#5" 
+        to="543470383#2" />
+
+    <!-- Inter-edge flows connecting different road segments -->
+    <flow 
+        id="flow_27227507_to_543470383" 
+        begin="0" end="1200" 
+        number="225" 
+        type="mg_road_mix" 
+        from="27227507#2" 
+        to="27227507#5" />
+    <flow 
+        id="flow_543470383_to_27227507" 
+        begin="0" end="1200" 
+        number="200" 
+        type="mg_road_mix" 
+        from="543470383#3" 
+        to="543470383#6" />
+
+    <!-- EMERGENCY VEHICLES - Distributed across network -->
+    <flow 
+        id="emergency_ambulance_route1" 
+        begin="0" end="1200" 
+        number="12" 
+        type="ambulance" 
+        from="27227507#1" 
+        to="27227507#3" />
+    <flow 
+        id="emergency_ambulance_route2" 
+        begin="0" end="1200" 
+        number="10" 
+        type="ambulance" 
+        from="543470383#0" 
+        to="543470383#3" />
+    <flow 
+        id="emergency_ambulance_route3" 
+        begin="0" end="1200" 
+        number="8" 
+        type="ambulance" 
+        from="1167293941#0" 
+        to="1167293941#1" />
+    
+    <!-- Fire truck routes -->
+    <flow 
+        id="emergency_fire_truck_route1" 
+        begin="0" end="1200" 
+        number="6" 
+        type="fire_truck" 
+        from="27227507#2" 
+        to="27227507#4" />
+    <flow 
+        id="emergency_fire_truck_route2" 
+        begin="0" end="1200" 
+        number="5" 
+        type="fire_truck" 
+        from="543470383#3" 
+        to="543470383#5" />
+
+    <!-- Additional cross flows for better traffic distribution -->
+    <flow 
+        id="cross_flow_1" 
+        begin="0" end="1200" 
+        number="60" 
+        type="mg_road_mix" 
+        from="27227507#1" 
+        to="1054124407#2" />
+    <flow 
+        id="cross_flow_2" 
+        begin="0" end="1200" 
+        number="75" 
+        type="mg_road_mix" 
+        from="543470383#2" 
+        to="1167293941#0" />
+    <flow 
+        id="cross_flow_3" 
+        begin="0" end="1200" 
+        number="70" 
+        type="mg_road_mix" 
+        from="1054124407#2" 
+        to="27227507#3" />
+
+</routes>
